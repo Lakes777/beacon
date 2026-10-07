@@ -154,4 +154,13 @@ public class CliquesTest(ApiDeTeste api)
         }
         return null;
     }
+
+    [Theory]
+    [InlineData("https://www.linkedin.com/feed/?token=abc", "https://www.linkedin.com/feed/")]
+    [InlineData("https://exemplo.com/pagina#email=x@y.com", "https://exemplo.com/pagina")]
+    [InlineData("https://exemplo.com/", "https://exemplo.com/")]
+    [InlineData("?so-consulta", null)]
+    [InlineData(null, null)]
+    public void RefererSemConsulta(string? referer, string? esperado) =>
+        Assert.Equal(esperado, Links.LinkRotas.SemConsulta(referer));
 }

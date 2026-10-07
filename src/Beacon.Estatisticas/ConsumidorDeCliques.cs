@@ -168,6 +168,13 @@ public class ConsumidorDeCliques(
             await DevolverAsync(canal, entrega, erro);
             return;
         }
+        catch (ObjectDisposedException erro)
+        {
+            // O serviço está desligando no meio da gravação (o banco já foi liberado): o clique é
+            // bom, então volta para a fila em vez de ir para a dead letter
+            await DevolverAsync(canal, entrega, erro);
+            return;
+        }
         catch (Exception erro)
         {
             // Erro inesperado (um bug): sem isto a mensagem ficaria sem ack, ocupando a fila até o

@@ -208,7 +208,7 @@ public static class LinkRotas
         }
         // Só deixa o clique na fila em memória (não espera o RabbitMQ): o redirecionamento sai na hora
         fila.Entregar(new CliqueRegistrado(Guid.CreateVersion7(), normalizado, DateTimeOffset.UtcNow,
-            Cabecalho(requisicao.Headers.UserAgent), Cabecalho(requisicao.Headers.Referer)));
+            Cabecalho(requisicao.Headers.UserAgent), SemConsulta(Cabecalho(requisicao.Headers.Referer))));
         return TypedResults.Redirect(destino);
     }
 
@@ -216,6 +216,16 @@ public static class LinkRotas
     /// Até 1.024 caracteres: cabeçalhos podem ter dezenas de KB, e 10.000 cliques gigantes esperando
     /// na fila em memória (RabbitMQ fora do ar) pesariam centenas de MB. Vazio vira null.
     /// </summary>
+    /// <summary>
+    /// Só o endereço, sem o que vem depois de "?" ou "#": ali costumam ir tokens, e-mails e buscas de
+    /// quem clicou, e uma mensagem na dead letter guardaria isso sem prazo. As estatísticas só usam o domínio.
+    /// </summary>
+    internal static string? SemConsulta(string? referer)
+    {
+        var corte = referer?.IndexOfAny(['?', '#']) ?? -1;
+        return corte < 0 ? referer : referer![..corte] is { Length: > 0 } resto ? resto : null;
+    }
+
     internal static string? Cabecalho(Microsoft.Extensions.Primitives.StringValues valor)
     {
         var texto = valor.ToString();

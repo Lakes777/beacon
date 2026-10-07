@@ -20,8 +20,9 @@ public sealed class PublicadorDeCliques(
     /// <summary>Quanto esperar a confirmação: um RabbitMQ travado não pode segurar a fila para sempre.</summary>
     private static readonly TimeSpan LimiteDaConfirmacao = TimeSpan.FromSeconds(10);
 
-    private IConnection? conexao;
-    private IChannel? canal;
+    // volatile: o /saude lê estes campos em outra thread
+    private volatile IConnection? conexao;
+    private volatile IChannel? canal;
 
     // -1 = ainda não sabe, 0 = fora do ar, 1 = no ar. Só a mudança vai para o log.
     private int estado = -1;
@@ -68,7 +69,9 @@ public sealed class PublicadorDeCliques(
         }
         finally
         {
-            // Os cliques ainda na fila em memória se perdem ao desligar (ver o relatório da fase 4)
+            await EsvaziarAoDesligar(emMaos);
+            emMaos = null;
+            // O que sobrar na fila em memória se perde ao desligar (ver o README, "Estatísticas e fila")
             if (fila.Pendentes + (emMaos is null ? 0 : 1) is var perdidos and > 0)
             {
                 log.LogWarning("A API parou com {Perdidos} cliques ainda não publicados", perdidos);
@@ -92,8 +95,45 @@ public sealed class PublicadorDeCliques(
         var novo = await conexao.CreateChannelAsync(
             new CreateChannelOptions(publisherConfirmationsEnabled: true, publisherConfirmationTrackingEnabled: true),
             parar);
-        await Topologia.DeclararAsync(novo, parar);
+        try
+        {
+            await Topologia.DeclararAsync(novo, parar);
+        }
+        catch
+        {
+            // Sem isso, cada tentativa que falha deixaria um canal órfão aberto na conexão
+            await FecharEmSilencio(novo);
+            throw;
+        }
         return novo;
+    }
+
+    /// <summary>
+    /// Ao desligar (ex.: deploy) com o RabbitMQ no ar, publica o que ainda está na memória, com um
+    /// prazo curto e próprio (o token "parar" já foi cancelado nessa hora).
+    /// </summary>
+    private async Task EsvaziarAoDesligar(CliqueRegistrado? emMaos)
+    {
+        if (canal is not { IsOpen: true } aberto)
+        {
+            return;
+        }
+        using var prazo = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        try
+        {
+            if (emMaos is not null)
+            {
+                await Publicar(aberto, emMaos, prazo.Token);
+            }
+            while (fila.Leitor.TryRead(out var clique))
+            {
+                await Publicar(aberto, clique, prazo.Token);
+            }
+        }
+        catch (Exception erro)
+        {
+            log.LogDebug(erro, "Não deu tempo de publicar todos os cliques ao desligar");
+        }
     }
 
     private async Task Publicar(IChannel canalAberto, CliqueRegistrado clique, CancellationToken parar)

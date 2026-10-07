@@ -26,6 +26,6 @@ public class Clique
     /// <summary>O site de onde veio (só o domínio, ex.: "www.linkedin.com"); null = acesso direto.</summary>
     public string? Origem { get; set; }
 
-    /// <summary>Prévias de link (LinkedIn, WhatsApp...) e robôs de busca. Guardado, mas fora das contas (fase 5).</summary>
+    /// <summary>Prévias de link (LinkedIn, WhatsApp...) e robôs de busca. Guardado, mas fora das contas.</summary>
     public bool Robo { get; set; }
 }

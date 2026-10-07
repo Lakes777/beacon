@@ -21,7 +21,7 @@ alguém abriu o portfólio e por qual caminho chegou.
  │  API (.NET)  │ ─────────────► │ Redis │  cache: redireciona sem ir ao banco
  │              │                └───────┘
  │              │  2. "houve um clique" ──► RabbitMQ (fila) ──► serviço de estatísticas ──► PostgreSQL
- └──────────────┘     e redireciona na hora      (guarda os cliques    (país, aparelho, navegador;
+ └──────────────┘     e redireciona na hora      (guarda os cliques    (origem, aparelho, navegador;
                                                   se o serviço cair)    sem contar em dobro)
 ```
 
@@ -34,7 +34,7 @@ na fila e são contados quando ele voltar.
 - [x] **2. Links:** criar (código escolhido ou aleatório), listar, editar, apagar e redirecionar em `/r/{codigo}`; documentação em `/docs`
 - [x] **3. Cache:** Redis na frente do redirecionamento, com invalidação quando o link muda e sem quebrar se o Redis cair
 - [x] **4. Estatísticas:** cada clique vira uma mensagem no RabbitMQ; um segundo programa a consome, descobre navegador, sistema, aparelho e origem e grava sem contar em dobro
-- [ ] 5. Login do painel e filtro de robôs (prévias do LinkedIn e do WhatsApp não contam)
+- [ ] 5. Login do painel (as rotas de /api/links passam a pedir login)
 - [ ] 6. Painel com gráficos, com identidade visual própria
 - [ ] 7. Publicação com Docker (com `UseForwardedHeaders` e `AllowedHosts`: hoje a `urlCurta` usa o
   endereço e o esquema do pedido, que atrás do proxy seriam os internos)
@@ -160,6 +160,9 @@ Por que assim:
 - **"Pelo menos uma vez":** o RabbitMQ pode entregar a mesma mensagem de novo (ex.: o serviço caiu
   depois de gravar e antes do `ack`). Cada clique tem um `Id` gerado na API e usado como chave
   primária, então a repetição não conta em dobro (consumidor *idempotente*).
+- **Limite do que não se perde:** os cliques que ainda estão na memória da API (RabbitMQ fora do ar)
+  se perdem se a API reiniciar nessa hora; com o RabbitMQ no ar, ela publica o que falta antes de
+  desligar. A URL de origem vai sem o que vem depois de `?` ou `#` (tokens, e-mails, buscas).
 - **Se o serviço de estatísticas cair, nada se perde:** os cliques ficam na fila (durável) e são
   gravados quando ele voltar. Se o banco cair, a mensagem volta para a fila com espera crescente.
 - **Mensagem inválida vai para a "dead letter"** (`beacon.estatisticas.mortos`) em vez de travar a

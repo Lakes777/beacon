@@ -52,7 +52,10 @@ public static class EstatisticaRotas
         // Só cliques de depois da criação: se o código foi de um link apagado, um clique dele que
         // ainda estava na fila pode ter sido gravado depois de apagar, e não é deste link
         var inicio = Max(InicioDoDia(dia), link.CriadoEm);
-        var doPeriodo = banco.Cliques.AsNoTracking().Where(c => c.Codigo == normalizado && c.Momento >= inicio);
+        // Até o fim de hoje: um clique com horário no futuro (relógio errado) faria o total não bater com os dias
+        var fim = InicioDoDia(Hoje().AddDays(1));
+        var doPeriodo = banco.Cliques.AsNoTracking()
+            .Where(c => c.Codigo == normalizado && c.Momento >= inicio && c.Momento < fim);
         var dePessoas = doPeriodo.Where(c => !c.Robo);
 
         var porTipo = await doPeriodo.GroupBy(c => c.Robo)
