@@ -220,4 +220,80 @@ public class EstatisticasTest(ApiDeTeste api)
         await cliente.PostAsJsonAsync("/api/links", new NovoLink("https://exemplo.com/novo", codigo), Cancelar);
         Assert.Equal(0, (await Estatisticas(codigo)).Total);
     }
+
+    private async Task<ResumoResposta> Resumo(int dias)
+    {
+        var resposta = await cliente.GetAsync($"/api/estatisticas?dias={dias}", Cancelar);
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        return (await resposta.Content.ReadFromJsonAsync<ResumoResposta>(Cancelar))!;
+    }
+
+    [Fact]
+    public async Task ResumoContaOsLinksJuntosSemRobosESemCodigosApagados()
+    {
+        // O banco é o mesmo de todos os testes, com cliques gravados pelos testes anteriores: este confere
+        // só os seus links e, no total, que os seus cliques entraram
+        var primeiro = await LinkAntigo();
+        var segundo = await LinkAntigo();
+        var semCliques = await LinkAntigo();
+        var apagado = CodigoUnico();
+        var ontem = Hoje.AddDays(-1);
+        await Gravar(b => b.Cliques.AddRange(
+            Clique(primeiro, EmBrasilia(ontem, 9)),
+            Clique(primeiro, EmBrasilia(ontem, 10)),
+            Clique(primeiro, EmBrasilia(ontem, 11), robo: true),
+            Clique(segundo, EmBrasilia(Hoje, 0, 30)),
+            // Fora dos 7 dias
+            Clique(segundo, EmBrasilia(Hoje.AddDays(-8), 12)),
+            // De um código que não é de nenhum link (apagado): não entra
+            Clique(apagado, EmBrasilia(ontem, 12))));
+
+        var resumo = await Resumo(7);
+
+        var porLink = resumo.PorLink.ToDictionary(l => l.Codigo, l => l.Cliques);
+        Assert.Equal(2, porLink[primeiro]);
+        Assert.Equal(1, porLink[segundo]);
+        Assert.Equal(0, porLink[semCliques]);
+        Assert.False(porLink.ContainsKey(apagado));
+        Assert.Equal(Enumerable.Range(0, 7).Select(i => Hoje.AddDays(i - 6)), resumo.PorDia.Select(d => d.Dia));
+        Assert.True(resumo.PorDia[5].Cliques >= 2);   // ontem
+        Assert.True(resumo.PorDia[6].Cliques >= 1);   // hoje
+        Assert.True(resumo.Robos >= 1);
+        // O total é a soma dos links, e os dias somam o mesmo
+        Assert.Equal(resumo.PorLink.Sum(l => l.Cliques), resumo.Total);
+        Assert.Equal(resumo.Total, resumo.PorDia.Sum(d => d.Cliques));
+        // Do mais clicado ao menos
+        Assert.Equal(resumo.PorLink.OrderByDescending(l => l.Cliques).Select(l => l.Cliques), resumo.PorLink.Select(l => l.Cliques));
+    }
+
+    [Fact]
+    public async Task ResumoIgnoraCliquesDeAntesDeOLinkExistir()
+    {
+        // Código reaproveitado: um clique de ontem, mas o link atual foi criado hoje
+        var codigo = CodigoUnico();
+        await Gravar(b => b.Links.Add(new Link { Codigo = codigo, Destino = "https://exemplo.com/", CriadoEm = DateTimeOffset.UtcNow }));
+        await Gravar(b => b.Cliques.Add(Clique(codigo, DateTimeOffset.UtcNow.AddDays(-1))));
+
+        var resumo = await Resumo(7);
+
+        Assert.Equal(0, resumo.PorLink.Single(l => l.Codigo == codigo).Cliques);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(366)]
+    public async Task ResumoRecusaPeriodoForaDoLimite(int dias)
+    {
+        var resposta = await cliente.GetAsync($"/api/estatisticas?dias={dias}", Cancelar);
+
+        Assert.Equal(HttpStatusCode.BadRequest, resposta.StatusCode);
+    }
+
+    [Fact]
+    public async Task ResumoPedeLogin()
+    {
+        var resposta = await api.CreateClient().GetAsync("/api/estatisticas", Cancelar);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, resposta.StatusCode);
+    }
 }

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Beacon</title>
+  <meta name="description" content="Painel do Beacon: links curtos e quem clicou neles.">
+  <meta name="theme-color" content="#0d1b2a">
+  <link rel="icon" href="img/estrela.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/beacon.css">
+  <script type="module" src="js/painel.js"></script>
+</head>
+<body>
+  <!-- A estrela de rumo: o ponto âmbar é a luz que o Beacon acende a cada clique -->
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="estrela" viewBox="0 0 32 32">
+      <circle cx="16" cy="16" r="13" fill="none" stroke="#1f3247" stroke-width="1.5"/>
+      <path d="M16 2 L19 13 L30 16 L19 19 L16 30 L13 19 L2 16 L13 13 Z" fill="#e8edf2"/>
+      <path d="M16 9 L17.8 14.2 L23 16 L17.8 17.8 L16 23 L14.2 17.8 L9 16 L14.2 14.2 Z" fill="#f2a93b"/>
+    </symbol>
+  </svg>
+
+  <p class="carregando" id="carregando">Carregando…</p>
+
+  <main class="entrada" id="entrada" hidden>
+    <form class="cartao-entrada" id="form-entrada" novalidate>
+      <svg class="estrela-grande" aria-hidden="true"><use href="#estrela"/></svg>
+      <h1>Beacon</h1>
+      <p class="sub">Entre para ver seus links e quem clicou neles.</p>
+      <label for="usuario">Usuário</label>
+      <input id="usuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      <label for="senha">Senha</label>
+      <input id="senha" name="senha" type="password" autocomplete="current-password" required>
+      <p class="erro" id="erro-entrada" role="alert" hidden></p>
+      <button type="submit" class="botao principal">Entrar</button>
+    </form>
+  </main>
+
+  <div class="painel" id="painel" hidden>
+    <header class="topo">
+      <div class="marca">
+        <svg aria-hidden="true"><use href="#estrela"/></svg>
+        <span>Beacon</span>
+      </div>
+      <div class="periodo" role="group" aria-label="Período">
+        <button type="button" data-dias="7">7 dias</button>
+        <button type="button" data-dias="30">30 dias</button>
+        <button type="button" data-dias="90">90 dias</button>
+      </div>
+      <div class="conta">
+        <span id="nome-usuario"></span>
+        <button type="button" class="link-botao" id="sair">Sair</button>
+      </div>
+    </header>
+
+    <div class="colunas">
+      <div class="coluna-principal">
+        <section class="resumo" aria-labelledby="titulo-resumo">
+          <h2 class="rotulo" id="titulo-resumo">Todos os links</h2>
+          <div class="numeros">
+            <div><b id="total-cliques">0</b><small id="rotulo-cliques">cliques</small></div>
+            <div><b id="total-ativos">0</b><small>links ativos</small></div>
+            <div><b id="total-robos">0</b><small>robôs fora da conta</small></div>
+          </div>
+          <div class="grafico" id="grafico-geral"></div>
+        </section>
+
+        <section class="lista" aria-labelledby="titulo-links">
+          <div class="cabeca-secao">
+            <h2 class="rotulo" id="titulo-links" tabindex="-1">Links</h2>
+            <button type="button" class="botao" id="abrir-novo" aria-expanded="false" aria-controls="form-novo">Novo link</button>
+          </div>
+
+          <form class="form-novo" id="form-novo" hidden novalidate>
+            <div class="campo">
+              <label for="novo-destino">Endereço de destino</label>
+              <input id="novo-destino" type="url" placeholder="https://lakes777.github.io" required>
+            </div>
+            <div class="campo">
+              <label for="novo-codigo">Código <span class="opcional">(opcional)</span></label>
+              <div class="com-prefixo"><span>/r/</span><input id="novo-codigo" placeholder="curriculo-vaga-x" autocapitalize="none" spellcheck="false"></div>
+            </div>
+            <p class="erro" id="erro-novo" role="alert" hidden></p>
+            <div class="acoes">
+              <button type="submit" class="botao principal">Criar link</button>
+              <button type="button" class="link-botao" id="cancelar-novo">Cancelar</button>
+            </div>
+          </form>
+
+          <ul class="links" id="links"></ul>
+          <p class="vazio" id="sem-links" hidden>Nenhum link ainda. Crie o primeiro em <strong>Novo link</strong>: um para o currículo, outro para o LinkedIn, e o Beacon conta os cliques de cada um.</p>
+        </section>
+      </div>
+
+      <aside class="detalhe" id="detalhe" aria-labelledby="d-codigo">
+        <p class="vazio" id="sem-detalhe">Escolha um link na lista para ver de onde vieram os cliques.</p>
+        <div id="conteudo-detalhe" hidden>
+          <div class="cabeca-detalhe">
+            <h2><span class="prefixo">/r/</span><span id="d-codigo"></span></h2>
+            <span class="estado" id="d-estado"></span>
+          </div>
+          <div class="url-curta">
+            <code id="d-url"></code>
+            <button type="button" class="botao pequeno" id="d-copiar">Copiar</button>
+          </div>
+          <p class="destino">leva a <a id="d-destino" target="_blank" rel="noopener noreferrer"></a></p>
+
+          <div class="numeros dois">
+            <div><b id="d-total">0</b><small id="d-rotulo-total">cliques</small></div>
+            <div><b id="d-robos">0</b><small>robôs fora da conta</small></div>
+          </div>
+          <div class="grafico" id="grafico-link"></div>
+
+          <div class="quebras">
+            <div><h3 class="rotulo">Origem</h3><ol class="barras" id="d-origens"></ol></div>
+            <div><h3 class="rotulo">Aparelho</h3><ol class="barras" id="d-aparelhos"></ol></div>
+            <div><h3 class="rotulo">Navegador</h3><ol class="barras" id="d-navegadores"></ol></div>
+            <div><h3 class="rotulo">Sistema</h3><ol class="barras" id="d-sistemas"></ol></div>
+          </div>
+
+          <form class="form-editar" id="form-editar" novalidate>
+            <h3 class="rotulo">Editar</h3>
+            <label for="editar-destino">Endereço de destino</label>
+            <input id="editar-destino" type="url" required>
+            <label class="interruptor" for="editar-ativo">
+              <input id="editar-ativo" type="checkbox">
+              <span>Ativo (desativado, o link curto dá 404 mas guarda os cliques)</span>
+            </label>
+            <p class="erro" id="erro-editar" role="alert" hidden></p>
+            <div class="acoes">
+              <button type="submit" class="botao principal">Salvar</button>
+              <button type="button" class="botao perigo" id="apagar">Apagar link</button>
+            </div>
+            <div class="confirmar" id="confirmar-apagar" hidden>
+              <p>Apagar <strong id="confirmar-codigo"></strong> e todos os cliques dele? Não dá para desfazer.</p>
+              <div class="acoes">
+                <button type="button" class="botao perigo" id="confirmar-sim">Apagar de vez</button>
+                <button type="button" class="link-botao" id="confirmar-nao">Manter</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="aviso" id="aviso" role="status" hidden></div>
+</body>
+</html>

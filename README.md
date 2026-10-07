@@ -11,6 +11,8 @@ alguém abriu o portfólio e por qual caminho chegou.
 
 É o meu primeiro projeto em **C# com .NET**, com **RabbitMQ** (fila de mensagens) e **Redis** (cache).
 
+![Painel do Beacon: cliques dos últimos 30 dias, lista de links e o detalhe de um link com origem, aparelho, navegador e sistema](docs/painel.png)
+
 ## Como funciona
 
 ```
@@ -35,7 +37,7 @@ na fila e são contados quando ele voltar.
 - [x] **3. Cache:** Redis na frente do redirecionamento, com invalidação quando o link muda e sem quebrar se o Redis cair
 - [x] **4. Estatísticas:** cada clique vira uma mensagem no RabbitMQ; um segundo programa a consome, descobre navegador, sistema, aparelho e origem e grava sem contar em dobro
 - [x] **5. Login:** conta única com senha (PBKDF2), sessão por cookie, limite de tentativas; toda rota de `/api` pede login, `/r/` continua pública
-- [ ] 6. Painel com gráficos, com identidade visual própria
+- [x] **6. Painel:** página servida pela própria API em `/`, com gráficos de cliques por dia, origem, aparelho, navegador e sistema; criar, editar e apagar links; identidade visual própria
 - [ ] 7. Publicação com Docker. Pendências: `UseForwardedHeaders` e `AllowedHosts` (hoje a `urlCurta`, o
   `Secure` do cookie e o IP do limite de login usam o pedido, que atrás do proxy seria o interno) e as chaves
   do Data Protection num volume (sem isso, cada nova versão da imagem desloga todo mundo)
@@ -52,13 +54,14 @@ na fila e são contados quando ele voltar.
 | `GET` | `/api/links/{codigo}` | Busca um link |
 | `PUT` | `/api/links/{codigo}` | Troca o `destino`; `ativo` opcional (omitido, mantém) |
 | `DELETE` | `/api/links/{codigo}` | Apaga um link e os cliques dele |
+| `GET` | `/api/estatisticas?dias=30` | Todos os links juntos: total, cliques por dia e cliques de cada link (o topo do painel) |
 | `GET` | `/api/links/{codigo}/estatisticas?dias=30` | Cliques por dia (horário de Brasília), navegador, sistema, aparelho e origem; robôs contados à parte |
 | `GET` | `/r/{codigo}` | Leva ao destino (302); 404 se não existe ou está desativado. O cabeçalho `X-Beacon-Cache` diz se veio do Redis (`HIT`) ou do banco (`MISS`) |
 | `GET` | `/saude` | `Healthy` com tudo no ar; `Degraded` (200) sem o Redis ou o RabbitMQ; `Unhealthy` (503) sem o banco |
 | `GET` | `/docs` | Página para testar a API no navegador (Scalar, a partir do OpenAPI em `/openapi/v1.json`) |
 
 Toda rota de `/api` pede login (401 sem ele), menos entrar e sair. São públicas só `/r/{codigo}`,
-`/saude`, `/docs` e `/openapi/v1.json`.
+`/saude`, `/docs`, `/openapi/v1.json` e os arquivos do painel (que não têm dados: os números vêm da API).
 
 ```bash
 # entra e guarda o cookie em sessao.txt (a conta é criada com o comando definir-senha, abaixo)
@@ -126,6 +129,20 @@ Precisa do Docker rodando: o Testcontainers sobe o Postgres sozinho.
 Os testes sobem a API inteira em memória (`WebApplicationFactory`) ligada a um **Postgres de verdade**
 num contêiner (Testcontainers), criado uma vez para todos os testes. O CI também confere a formatação
 com `dotnet format`.
+
+## Painel
+
+Em `http://localhost:8090/` (o endereço da própria API). Feito com HTML, CSS e JavaScript puros, sem
+biblioteca e sem etapa de build: os gráficos são SVG desenhados pelo script.
+
+- **Mesma origem que a API:** o cookie da sessão (`SameSite=Strict`, `Path=/api`) vai sozinho, sem CORS.
+- **Identidade própria:** o mar à noite (azul-marinho) e a luz do farol (âmbar). A logo é uma estrela de
+  rumo das cartas náuticas, e os círculos no canto lembram as linhas de profundidade de uma carta. As fontes
+  (Bricolage Grotesque e IBM Plex) são servidas pelo próprio Beacon, sem depender do Google Fonts.
+- **Segurança:** os arquivos saem com `Content-Security-Policy` que só aceita o próprio Beacon (scripts,
+  estilos, fontes e conexões), `X-Frame-Options: DENY` e `nosniff`. Tudo que vem da API entra na página
+  como texto (`textContent`), nunca como HTML, então um destino com `<script>` aparece escrito, sem rodar.
+- **No celular:** a lista e o detalhe ficam um embaixo do outro; tocar numa barra do gráfico mostra o dia.
 
 ## Login
 

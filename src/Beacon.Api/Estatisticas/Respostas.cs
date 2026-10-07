@@ -19,3 +19,9 @@ public record EstatisticasResposta(
 public record CliquesNoDia(DateOnly Dia, int Cliques);
 
 public record Contagem(string Nome, int Cliques);
+
+/// <summary>O que sai em GET /api/estatisticas: todos os links juntos (sem robôs).</summary>
+/// <param name="PorLink">Todos os links, do mais clicado ao menos (empate: ordem alfabética), inclusive os sem cliques.</param>
+public record ResumoResposta(int Total, int Robos, List<CliquesNoDia> PorDia, List<CliquesDoLink> PorLink);
+
+public record CliquesDoLink(string Codigo, int Cliques);

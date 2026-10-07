@@ -26,17 +26,81 @@ public static class EstatisticaRotas
         app.MapGet("/api/links/{codigo}/estatisticas", Calcular)
             .WithTags("Links")
             .WithSummary($"Cliques do link nos últimos dias (1 a {MaximoDeDias}; padrão {DiasPadrao}), sem contar robôs");
+        app.MapGet("/api/estatisticas", Resumir)
+            .WithTags("Links")
+            .WithSummary("Cliques de todos os links juntos no período, por dia e por link (o topo do painel)");
+    }
+
+    /// <summary>
+    /// Os números do painel inteiro: total, cliques por dia e quantos cliques cada link teve.
+    /// Os cliques entram pela junção com link: um clique de um código apagado (ou de antes de o link
+    /// atual existir, se o código foi reaproveitado) fica de fora, como em Calcular.
+    /// </summary>
+    private static async Task<Results<Ok<ResumoResposta>, ValidationProblem>> Resumir(
+        BeaconContexto banco, CancellationToken cancelar, int dias = DiasPadrao)
+    {
+        if (DiasInvalidos(dias) is { } problema)
+        {
+            return problema;
+        }
+        var dia = Hoje().AddDays(-(dias - 1));
+        var inicio = InicioDoDia(dia);
+        var fim = InicioDoDia(Hoje().AddDays(1));
+        var doPeriodo =
+            from c in banco.Cliques.AsNoTracking()
+            join l in banco.Links.AsNoTracking() on c.Codigo equals l.Codigo
+            where c.Momento >= inicio && c.Momento < fim && c.Momento >= l.CriadoEm
+            select c;
+        var dePessoas = doPeriodo.Where(c => !c.Robo);
+
+        var robos = await doPeriodo.CountAsync(c => c.Robo, cancelar);
+        var porLink = await dePessoas.GroupBy(c => c.Codigo)
+            .Select(g => new { Codigo = g.Key, Cliques = g.Count() })
+            .ToDictionaryAsync(g => g.Codigo, g => g.Cliques, cancelar);
+        var porDia = await ContarPorDia(dePessoas, dia, dias, cancelar);
+
+        return TypedResults.Ok(new ResumoResposta(
+            Total: porLink.Values.Sum(),
+            Robos: robos,
+            porDia,
+            // Todo link aparece, inclusive os sem cliques no período: o painel não precisa completar
+            PorLink: (await banco.Links.AsNoTracking().Select(l => l.Codigo).ToListAsync(cancelar))
+                .Select(codigo => new CliquesDoLink(codigo, porLink.GetValueOrDefault(codigo)))
+                .OrderByDescending(l => l.Cliques).ThenBy(l => l.Codigo)
+                .ToList()));
+    }
+
+    private static ValidationProblem? DiasInvalidos(int dias) => dias is < 1 or > MaximoDeDias
+        ? TypedResults.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["dias"] = [$"Use de 1 a {MaximoDeDias} dias."],
+        })
+        : null;
+
+    /// <summary>
+    /// Um item por dia, do primeiro a hoje, com 0 nos dias sem clique (o gráfico não precisa adivinhar
+    /// os buracos). Vira "momento AT TIME ZONE 'America/Sao_Paulo'" no Postgres: cada clique vira a data
+    /// e hora de Brasília antes de cortar o dia. (O Npgsql só traduz a versão com DateTime, daí o UtcDateTime.)
+    /// </summary>
+    private static async Task<List<CliquesNoDia>> ContarPorDia(IQueryable<Clique> cliques, DateOnly primeiro,
+        int dias, CancellationToken cancelar)
+    {
+        var contagem = await cliques
+            .GroupBy(c => TimeZoneInfo.ConvertTimeBySystemTimeZoneId(c.Momento.UtcDateTime, Fuso).Date)
+            .Select(g => new { Dia = g.Key, Cliques = g.Count() })
+            .ToDictionaryAsync(d => DateOnly.FromDateTime(d.Dia), d => d.Cliques, cancelar);
+        return Enumerable.Range(0, dias)
+            .Select(i => primeiro.AddDays(i))
+            .Select(d => new CliquesNoDia(d, contagem.GetValueOrDefault(d)))
+            .ToList();
     }
 
     private static async Task<Results<Ok<EstatisticasResposta>, NotFound, ValidationProblem>> Calcular(
         string codigo, BeaconContexto banco, CancellationToken cancelar, int dias = DiasPadrao)
     {
-        if (dias is < 1 or > MaximoDeDias)
+        if (DiasInvalidos(dias) is { } problema)
         {
-            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
-            {
-                ["dias"] = [$"Use de 1 a {MaximoDeDias} dias."],
-            });
+            return problema;
         }
         var normalizado = Codigos.Normalizar(codigo);
         var link = await banco.Links.AsNoTracking()
@@ -61,17 +125,7 @@ public static class EstatisticaRotas
         var porTipo = await doPeriodo.GroupBy(c => c.Robo)
             .Select(g => new { Robo = g.Key, Cliques = g.Count() })
             .ToListAsync(cancelar);
-        // Vira "momento AT TIME ZONE 'America/Sao_Paulo'" no Postgres: cada clique vira a data e hora
-        // de Brasília antes de cortar o dia. (O Npgsql só traduz a versão com DateTime, daí o UtcDateTime.)
-        var contagemPorDia = await dePessoas
-            .GroupBy(c => TimeZoneInfo.ConvertTimeBySystemTimeZoneId(c.Momento.UtcDateTime, Fuso).Date)
-            .Select(g => new { Dia = g.Key, Cliques = g.Count() })
-            .ToDictionaryAsync(d => DateOnly.FromDateTime(d.Dia), d => d.Cliques, cancelar);
-        // Os dias sem clique também aparecem (com 0): o gráfico não precisa adivinhar os buracos
-        var porDia = Enumerable.Range(0, dias)
-            .Select(i => dia.AddDays(i))
-            .Select(d => new CliquesNoDia(d, contagemPorDia.GetValueOrDefault(d)))
-            .ToList();
+        var porDia = await ContarPorDia(dePessoas, dia, dias, cancelar);
 
         return TypedResults.Ok(new EstatisticasResposta(
             normalizado,

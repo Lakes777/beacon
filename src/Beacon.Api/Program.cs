@@ -4,6 +4,7 @@ using Beacon.Api.Contas;
 using Beacon.Api.Estatisticas;
 using Beacon.Api.Links;
 using Beacon.Api.Mensageria;
+using Beacon.Api.Painel;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
@@ -111,12 +112,16 @@ app.UseExceptionHandler(new ExceptionHandlerOptions
 });
 // Respostas de erro sem corpo (400, 404, 415...) também saem em problem details
 app.UseStatusCodePages();
+// O painel (wwwroot): "/" vira "/index.html". Os arquivos são públicos (sem dados: os números vêm
+// da API, que pede login) e saem antes da autenticação, então não passam pela política de login.
+app.UseDefaultFiles();
+app.UseStaticFiles(new StaticFileOptions { OnPrepareResponse = CabecalhosDoPainel.Proteger });
 // Quem é (lê o cookie), o que pode (a rota pede login?) e quantas vezes (limite do /api/sessao)
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 
-// Toda rota pede login (a política padrão em AdicionarLogin); estas são as públicas
+// Toda rota pede login (a política padrão em AdicionarLogin); estas são as públicas (e o painel, acima)
 app.MapOpenApi().AllowAnonymous();
 app.MapScalarApiReference("/docs", opcoes => opcoes.WithTitle("Beacon")).AllowAnonymous();
 
@@ -124,11 +129,6 @@ app.MapHealthChecks("/saude").AllowAnonymous();
 app.MapearSessao();
 app.MapearLinks();
 app.MapearEstatisticas();
-app.MapGet("/", () => Results.Ok(new
-{
-    nome = "Beacon",
-    descricao = "Encurtador de links com estatísticas de cliques",
-})).AllowAnonymous();
 
 await app.RunAsync();
 return 0;

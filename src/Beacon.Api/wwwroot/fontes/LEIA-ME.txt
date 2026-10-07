@@ -1,0 +1,4 @@
+Fontes servidas pelo próprio Beacon (sem depender do Google Fonts), só com os caracteres latinos:
+
+- Bricolage Grotesque (títulos e números): SIL Open Font License 1.1 (OFL-bricolage-grotesque.txt), https://github.com/ateliertriay/bricolage
+- IBM Plex Sans e IBM Plex Mono (texto e códigos): SIL Open Font License 1.1 (OFL-ibm-plex.txt), https://github.com/IBM/plex
