@@ -1,4 +1,5 @@
 using Beacon.Api.Banco;
+using Beacon.Api.Cache;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -29,7 +30,7 @@ public static class LinkRotas
     }
 
     private static async Task<Results<Created<LinkResposta>, ValidationProblem, ProblemHttpResult>> Criar(
-        NovoLink pedido, BeaconContexto banco, HttpRequest requisicao, CancellationToken cancelar)
+        NovoLink pedido, BeaconContexto banco, CacheDeLinks cache, HttpRequest requisicao, CancellationToken cancelar)
     {
         var erros = new Dictionary<string, string[]>();
         var (destino, problemaDestino) = Destinos.Validar(pedido.Destino);
@@ -56,9 +57,13 @@ public static class LinkRotas
         }
 
         var link = await Salvar(banco, destino!, escolhido, Codigos.Gerar, cancelar);
-        return link is null
-            ? CodigoEmUso(escolhido!)
-            : TypedResults.Created($"/api/links/{link.Codigo}", Resposta(link, requisicao));
+        if (link is null)
+        {
+            return CodigoEmUso(escolhido!);
+        }
+        // Alguém pode ter tentado esse código antes de ele existir: apaga o "não existe" guardado
+        await cache.Esquecer(link.Codigo);
+        return TypedResults.Created($"/api/links/{link.Codigo}", Resposta(link, requisicao));
     }
 
     /// <summary>
@@ -113,7 +118,8 @@ public static class LinkRotas
     }
 
     private static async Task<Results<Ok<LinkResposta>, NotFound, ValidationProblem>> Editar(
-        string codigo, EdicaoDeLink pedido, BeaconContexto banco, HttpRequest requisicao, CancellationToken cancelar)
+        string codigo, EdicaoDeLink pedido, BeaconContexto banco, CacheDeLinks cache, HttpRequest requisicao,
+        CancellationToken cancelar)
     {
         var (destino, problema) = Destinos.Validar(pedido.Destino);
         if (problema is not null)
@@ -128,31 +134,68 @@ public static class LinkRotas
         link.Destino = destino!;
         link.Ativo = pedido.Ativo ?? link.Ativo;
         await banco.SaveChangesAsync(cancelar);
+        // Depois de gravar no banco, nunca antes: senão um clique no meio poderia guardar o destino velho de novo
+        await cache.Esquecer(link.Codigo);
         return TypedResults.Ok(Resposta(link, requisicao));
     }
 
     private static async Task<Results<NoContent, NotFound>> Apagar(
-        string codigo, BeaconContexto banco, CancellationToken cancelar)
+        string codigo, BeaconContexto banco, CacheDeLinks cache, CancellationToken cancelar)
     {
         // Apaga direto no banco, sem carregar o link antes (um DELETE só)
         var normalizado = Codigos.Normalizar(codigo);
         var apagados = await banco.Links.Where(l => l.Codigo == normalizado)
             .ExecuteDeleteAsync(cancelar);
-        return apagados == 0 ? TypedResults.NotFound() : TypedResults.NoContent();
+        if (apagados == 0)
+        {
+            return TypedResults.NotFound();
+        }
+        await cache.Esquecer(normalizado);
+        return TypedResults.NoContent();
     }
 
     /// <summary>
     /// 302 (temporário), e não 301 (permanente): o navegador guardaria o 301 para sempre e
     /// pararia de passar pelo Beacon, então trocar o destino e contar os cliques não funcionaria.
+    /// Consulta o Redis primeiro; só vai ao banco se ele não souber (o cabeçalho X-Beacon-Cache diz qual foi).
     /// </summary>
     private static async Task<Results<RedirectHttpResult, NotFound>> Redirecionar(
-        string codigo, BeaconContexto banco, CancellationToken cancelar)
+        string codigo, BeaconContexto banco, CacheDeLinks cache, HttpResponse resposta, IHostEnvironment ambiente,
+        CancellationToken cancelar)
     {
         var normalizado = Codigos.Normalizar(codigo);
-        var destino = await banco.Links.AsNoTracking()
-            .Where(l => l.Codigo == normalizado && l.Ativo)
-            .Select(l => l.Destino)
-            .SingleOrDefaultAsync(cancelar);
+        // Um texto que nunca poderia ser código não vai nem ao cache nem ao banco: senão um robô
+        // mandando /r/ + milhares de caracteres aleatórios encheria o Redis de "não existe"
+        if (Codigos.Problema(normalizado) is not null)
+        {
+            return TypedResults.NotFound();
+        }
+        // HIT/MISS ajuda a testar e a explicar, mas em produção contaria a qualquer visitante
+        // se aquele link foi clicado nos últimos minutos
+        var mostrarCache = !ambiente.IsProduction();
+        var guardado = await cache.Buscar(normalizado);
+        string? destino;
+        if (guardado.Achou)
+        {
+            if (mostrarCache)
+            {
+                resposta.Headers["X-Beacon-Cache"] = "HIT";
+            }
+            destino = guardado.Destino;
+        }
+        else
+        {
+            if (mostrarCache)
+            {
+                resposta.Headers["X-Beacon-Cache"] = "MISS";
+            }
+            destino = await banco.Links.AsNoTracking()
+                .Where(l => l.Codigo == normalizado && l.Ativo)
+                .Select(l => l.Destino)
+                .SingleOrDefaultAsync(cancelar);
+            // Guarda também o "não existe" (por pouco tempo): tentativas repetidas não vão ao banco
+            await cache.Guardar(normalizado, destino);
+        }
         return destino is null ? TypedResults.NotFound() : TypedResults.Redirect(destino);
     }
 

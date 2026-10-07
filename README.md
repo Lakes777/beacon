@@ -33,7 +33,7 @@ na fila e são contados quando ele voltar.
 
 - [x] **1. Esqueleto:** ASP.NET Core 10, PostgreSQL com Entity Framework Core e migrações, `/saude`, testes com Testcontainers, CI
 - [x] **2. Links:** criar (código escolhido ou aleatório), listar, editar, apagar e redirecionar em `/r/{codigo}`; documentação em `/docs`
-- [ ] 3. Redis como cache do redirecionamento, com invalidação quando o link muda
+- [x] **3. Cache:** Redis na frente do redirecionamento, com invalidação quando o link muda e sem quebrar se o Redis cair
 - [ ] 4. RabbitMQ e o serviço de estatísticas (sem contar o mesmo clique duas vezes)
 - [ ] 5. Login do painel e filtro de robôs (prévias do LinkedIn e do WhatsApp não contam)
 - [ ] 6. Painel com gráficos, com identidade visual própria
@@ -49,8 +49,8 @@ na fila e são contados quando ele voltar.
 | `GET` | `/api/links/{codigo}` | Busca um link |
 | `PUT` | `/api/links/{codigo}` | Troca o `destino`; `ativo` opcional (omitido, mantém) |
 | `DELETE` | `/api/links/{codigo}` | Apaga um link |
-| `GET` | `/r/{codigo}` | Leva ao destino (302); 404 se não existe ou está desativado |
-| `GET` | `/saude` | `Healthy` se a API e o banco estão no ar |
+| `GET` | `/r/{codigo}` | Leva ao destino (302); 404 se não existe ou está desativado. O cabeçalho `X-Beacon-Cache` diz se veio do Redis (`HIT`) ou do banco (`MISS`) |
+| `GET` | `/saude` | `Healthy` com banco e Redis no ar; `Degraded` (200) sem o Redis; `Unhealthy` (503) sem o banco |
 | `GET` | `/docs` | Página para testar a API no navegador (Scalar, a partir do OpenAPI em `/openapi/v1.json`) |
 
 Por enquanto as rotas de `/api/links` não pedem login: o painel com login chega na fase 5, antes de publicar.
@@ -71,6 +71,7 @@ Erros vêm no formato padrão *problem details* (RFC 9457): 400 com os campos e 
 | Linguagem | C# 14 / .NET 10 | Java 21 |
 | API | ASP.NET Core (Minimal APIs) | Spring Boot (`@RestController`) |
 | Banco | PostgreSQL 17 + Entity Framework Core (Npgsql) | PostgreSQL + JPA/Hibernate |
+| Cache | Redis 8 (StackExchange.Redis) | (o Vigil não tem cache) |
 | Migrações | Migrações do EF Core, aplicadas ao subir | Flyway |
 | Testes | xUnit v3 + `WebApplicationFactory` + Testcontainers | JUnit + `@SpringBootTest` + Testcontainers |
 | Dependências | NuGet | Maven |
@@ -82,7 +83,7 @@ Precisa do [.NET 10 SDK](https://dotnet.microsoft.com/download) e do Docker.
 ```bash
 git clone https://github.com/Lakes777/beacon.git
 cd beacon
-docker compose up -d                       # Postgres na porta 5434
+docker compose up -d                       # Postgres na porta 5434 e Redis na 6379
 dotnet run --project src/Beacon.Api        # API em http://localhost:8090
 curl localhost:8090/saude                  # "Healthy" quando a API e o banco estão no ar
 ```
@@ -105,6 +106,38 @@ Precisa do Docker rodando: o Testcontainers sobe o Postgres sozinho.
 Os testes sobem a API inteira em memória (`WebApplicationFactory`) ligada a um **Postgres de verdade**
 num contêiner (Testcontainers), criado uma vez para todos os testes. O CI também confere a formatação
 com `dotnet format`.
+
+## Cache
+
+O redirecionamento é o caminho mais usado (cada clique passa por ele), então o Redis fica na frente
+do Postgres, no padrão *cache-aside*:
+
+1. O clique em `/r/{codigo}` consulta o Redis (`beacon:link:{codigo}`).
+2. Se o Redis não souber, busca no Postgres e guarda a resposta por **10 minutos**.
+3. Criar, editar, desativar ou apagar um link **apaga a cópia** na hora (depois de gravar no banco).
+
+Detalhes:
+
+- **"Não existe" também fica guardado**, por 1 minuto: tentativas repetidas com um código errado (ou
+  um robô testando códigos) não vão ao banco. Criar um link com esse código apaga a marca, então ele
+  funciona na hora.
+- **Redis fora do ar não derruba nada:** cada operação de cache engole o erro e o clique vai ao banco
+  (mais lento, mas funciona). A API sobe mesmo sem o Redis e reconecta sozinha; o `/saude` fica
+  `Degraded`, e não `Unhealthy`, para o Docker não reiniciar a API à toa. O limite de espera é de
+  500 ms: um Redis lento não segura o clique.
+- **Por que o prazo de 10 minutos, se a cópia é apagada a cada mudança?** Há um caso raro em que a
+  cópia velha volta: um clique lê o destino antigo no banco, a edição grava o novo e apaga a cópia,
+  e só então o clique guarda o destino antigo no Redis. O mesmo vale para os outros estados: um link
+  recém-criado pode dar 404 por até 1 minuto (o "não existe" de um clique de antes), e um link
+  desativado pode continuar redirecionando por até 10 minutos. O prazo limita quanto esse erro dura.
+  (Para zerar de vez, daria para guardar uma versão do link junto com o destino.)
+- **Redis caído falha na hora** (`BacklogPolicy.FailFast`): o padrão da biblioteca guarda os comandos
+  numa fila esperando a conexão voltar, e cada clique esperava cerca de 2 s. A queda e a volta da
+  conexão geram um aviso cada no log, e não um por clique.
+- **Só códigos possíveis chegam ao cache:** `/r/` seguido de um texto que nunca seria um código
+  (longo demais, com símbolos) responde 404 na hora, sem criar chave no Redis nem consultar o banco.
+- **`X-Beacon-Cache` fora da produção:** ele diria a qualquer visitante se aquele link foi clicado
+  nos últimos minutos.
 
 ## Decisões
 

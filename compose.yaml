@@ -1,5 +1,5 @@
-# Postgres para rodar a API no seu computador: docker compose up -d
-# Porta 5434 (a 5433 é do Vigil)
+# Postgres e Redis para rodar a API no seu computador: docker compose up -d
+# Postgres na porta 5434 (a 5433 é do Vigil); Redis na 6379
 services:
   banco:
     image: postgres:17-alpine
@@ -13,6 +13,14 @@ services:
       - dados:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U beacon -d beacon"]
+      interval: 5s
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
 
 volumes:

@@ -1,7 +1,9 @@
 using Beacon.Api.Banco;
+using Beacon.Api.Cache;
 using Beacon.Api.Links;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,8 +17,36 @@ builder.Services.AddDbContext<BeaconContexto>(opcoes => opcoes
     .UseNpgsql(conexao)
     .UseSnakeCaseNamingConvention());
 
-// /saude responde "Healthy" só se o banco também responder
-builder.Services.AddHealthChecks().AddDbContextCheck<BeaconContexto>("banco");
+// Redis (cache do redirecionamento). Uma conexão só para a API inteira (singleton), que o
+// StackExchange.Redis compartilha entre os pedidos. AbortOnConnectFail = false: a API sobe mesmo
+// com o Redis fora do ar e reconecta sozinha quando ele voltar.
+var redis = ConfigurationOptions.Parse(builder.Configuration.GetConnectionString("Redis")
+    ?? throw new InvalidOperationException(
+        "Defina a conexão com o Redis em ConnectionStrings:Redis (variável ConnectionStrings__Redis)."));
+redis.AbortOnConnectFail = false;
+redis.ConnectTimeout = 2000;
+// Um Redis lento não pode segurar o clique: em 500 ms desiste e vai ao banco
+redis.AsyncTimeout = 500;
+redis.SyncTimeout = 500;
+// Com a conexão caída, falha na hora. O padrão guarda os comandos numa fila esperando o Redis
+// voltar, e cada clique esperava ~1 s por operação antes de desistir.
+redis.BacklogPolicy = BacklogPolicy.FailFast;
+builder.Services.AddSingleton<IConnectionMultiplexer>(servicos =>
+{
+    var log = servicos.GetRequiredService<ILogger<CacheDeLinks>>();
+    var conexao = ConnectionMultiplexer.Connect(redis);
+    // Um aviso quando o Redis cai e outro quando volta (e não um a cada clique)
+    conexao.ConnectionFailed += (_, e) =>
+        log.LogWarning("Conexão com o Redis caiu ({Tipo}); os links vão direto ao banco", e.FailureType);
+    conexao.ConnectionRestored += (_, _) => log.LogInformation("Conexão com o Redis voltou");
+    return conexao;
+});
+builder.Services.AddSingleton<CacheDeLinks>();
+
+// /saude: "Healthy" com banco e Redis no ar; "Degraded" (ainda 200) sem o Redis; "Unhealthy" (503) sem o banco
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<BeaconContexto>("banco")
+    .AddCheck<SaudeDoRedis>("redis");
 
 // Erros no formato padrão "problem details" (RFC 9457), como o ProblemDetail do Vigil
 builder.Services.AddProblemDetails();
