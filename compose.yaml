@@ -1,0 +1,19 @@
+# Postgres para rodar a API no seu computador: docker compose up -d
+# Porta 5434 (a 5433 é do Vigil)
+services:
+  banco:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: beacon
+      POSTGRES_USER: beacon
+      POSTGRES_PASSWORD: beacon
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U beacon -d beacon"]
+      interval: 5s
+
+volumes:
+  dados:

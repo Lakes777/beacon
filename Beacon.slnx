@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Beacon.Api/Beacon.Api.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Beacon.Api.Tests/Beacon.Api.Tests.csproj" />
+  </Folder>
+</Solution>

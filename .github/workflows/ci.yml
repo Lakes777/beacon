@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - run: dotnet restore
+      - name: Formatação (dotnet format)
+        run: dotnet format --verify-no-changes --no-restore
+      - run: dotnet build --no-restore
+      - name: Testes (Testcontainers sobe o Postgres)
+        run: dotnet test --no-build
