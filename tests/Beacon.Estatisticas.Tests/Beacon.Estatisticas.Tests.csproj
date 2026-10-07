@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- O xUnit v3 gera um executável de testes -->
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Testcontainers.PostgreSql" Version="4.15.0" />
+    <PackageReference Include="Testcontainers.RabbitMq" Version="4.15.0" />
+    <PackageReference Include="xunit.v3" Version="4.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Beacon.Estatisticas\Beacon.Estatisticas.csproj" />
+    <!-- Só nos testes: as migrações da API criam a tabela clique no Postgres do contêiner -->
+    <ProjectReference Include="..\..\src\Beacon.Api\Beacon.Api.csproj" />
+  </ItemGroup>
+
+</Project>
