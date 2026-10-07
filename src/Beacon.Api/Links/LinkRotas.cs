@@ -1,5 +1,7 @@
 using Beacon.Api.Banco;
 using Beacon.Api.Cache;
+using Beacon.Api.Mensageria;
+using Beacon.Contratos;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -142,14 +144,18 @@ public static class LinkRotas
     private static async Task<Results<NoContent, NotFound>> Apagar(
         string codigo, BeaconContexto banco, CacheDeLinks cache, CancellationToken cancelar)
     {
-        // Apaga direto no banco, sem carregar o link antes (um DELETE só)
+        // Apaga direto no banco, sem carregar o link antes. Os cliques vão junto, na mesma transação:
+        // o código pode ser reaproveitado por outro link, que não deve herdar os números deste.
         var normalizado = Codigos.Normalizar(codigo);
+        await using var transacao = await banco.Database.BeginTransactionAsync(cancelar);
         var apagados = await banco.Links.Where(l => l.Codigo == normalizado)
             .ExecuteDeleteAsync(cancelar);
         if (apagados == 0)
         {
             return TypedResults.NotFound();
         }
+        await banco.Cliques.Where(c => c.Codigo == normalizado).ExecuteDeleteAsync(cancelar);
+        await transacao.CommitAsync(cancelar);
         await cache.Esquecer(normalizado);
         return TypedResults.NoContent();
     }
@@ -160,8 +166,8 @@ public static class LinkRotas
     /// Consulta o Redis primeiro; só vai ao banco se ele não souber (o cabeçalho X-Beacon-Cache diz qual foi).
     /// </summary>
     private static async Task<Results<RedirectHttpResult, NotFound>> Redirecionar(
-        string codigo, BeaconContexto banco, CacheDeLinks cache, HttpResponse resposta, IHostEnvironment ambiente,
-        CancellationToken cancelar)
+        string codigo, BeaconContexto banco, CacheDeLinks cache, FilaDeCliques fila, HttpRequest requisicao,
+        HttpResponse resposta, IHostEnvironment ambiente, CancellationToken cancelar)
     {
         var normalizado = Codigos.Normalizar(codigo);
         // Um texto que nunca poderia ser código não vai nem ao cache nem ao banco: senão um robô
@@ -196,8 +202,27 @@ public static class LinkRotas
             // Guarda também o "não existe" (por pouco tempo): tentativas repetidas não vão ao banco
             await cache.Guardar(normalizado, destino);
         }
-        return destino is null ? TypedResults.NotFound() : TypedResults.Redirect(destino);
+        if (destino is null)
+        {
+            return TypedResults.NotFound();
+        }
+        // Só deixa o clique na fila em memória (não espera o RabbitMQ): o redirecionamento sai na hora
+        fila.Entregar(new CliqueRegistrado(Guid.CreateVersion7(), normalizado, DateTimeOffset.UtcNow,
+            Cabecalho(requisicao.Headers.UserAgent), Cabecalho(requisicao.Headers.Referer)));
+        return TypedResults.Redirect(destino);
     }
+
+    /// <summary>
+    /// Até 1.024 caracteres: cabeçalhos podem ter dezenas de KB, e 10.000 cliques gigantes esperando
+    /// na fila em memória (RabbitMQ fora do ar) pesariam centenas de MB. Vazio vira null.
+    /// </summary>
+    internal static string? Cabecalho(Microsoft.Extensions.Primitives.StringValues valor)
+    {
+        var texto = valor.ToString();
+        return texto.Length == 0 ? null : texto.Length > TamanhoDoCabecalho ? texto[..TamanhoDoCabecalho] : texto;
+    }
+
+    internal const int TamanhoDoCabecalho = 1024;
 
     private static Task<Link?> Achar(BeaconContexto banco, string codigo, CancellationToken cancelar)
     {

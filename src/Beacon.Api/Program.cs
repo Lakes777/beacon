@@ -1,6 +1,8 @@
 using Beacon.Api.Banco;
 using Beacon.Api.Cache;
+using Beacon.Api.Estatisticas;
 using Beacon.Api.Links;
+using Beacon.Api.Mensageria;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
@@ -43,10 +45,32 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(servicos =>
 });
 builder.Services.AddSingleton<CacheDeLinks>();
 
-// /saude: "Healthy" com banco e Redis no ar; "Degraded" (ainda 200) sem o Redis; "Unhealthy" (503) sem o banco
+// RabbitMQ (fila dos cliques). Sem a conexão configurada a API não sobe; com o RabbitMQ fora do ar
+// ela sobe sim: o PublicadorDeCliques tenta conectar em segundo plano e os cliques esperam na memória.
+var rabbitmq = builder.Configuration.GetConnectionString("RabbitMQ")
+    ?? throw new InvalidOperationException(
+        "Defina a conexão com o RabbitMQ em ConnectionStrings:RabbitMQ (variável ConnectionStrings__RabbitMQ).");
+builder.Services.AddSingleton(new RabbitMQ.Client.ConnectionFactory
+{
+    Uri = new Uri(rabbitmq),
+    // Depois da primeira conexão, a biblioteca reconecta sozinha e recria canais, filas e ligações
+    AutomaticRecoveryEnabled = true,
+    TopologyRecoveryEnabled = true,
+    NetworkRecoveryInterval = TimeSpan.FromSeconds(2),
+    // O padrão é 30 s: um endereço que não responde seguraria o publicador esse tempo todo
+    RequestedConnectionTimeout = TimeSpan.FromSeconds(5),
+});
+builder.Services.AddSingleton<FilaDeCliques>();
+// Singleton e serviço em segundo plano ao mesmo tempo: o /saude precisa da mesma instância que roda
+builder.Services.AddSingleton<PublicadorDeCliques>();
+builder.Services.AddHostedService(servicos => servicos.GetRequiredService<PublicadorDeCliques>());
+
+// /saude: "Healthy" com tudo no ar; "Degraded" (ainda 200) sem o Redis ou sem o RabbitMQ;
+// "Unhealthy" (503) sem o banco
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<BeaconContexto>("banco")
-    .AddCheck<SaudeDoRedis>("redis");
+    .AddCheck<SaudeDoRedis>("redis")
+    .AddCheck<SaudeDoRabbitMQ>("rabbitmq");
 
 // Erros no formato padrão "problem details" (RFC 9457), como o ProblemDetail do Vigil
 builder.Services.AddProblemDetails();
@@ -77,6 +101,7 @@ app.MapScalarApiReference("/docs", opcoes => opcoes.WithTitle("Beacon"));
 
 app.MapHealthChecks("/saude");
 app.MapearLinks();
+app.MapearEstatisticas();
 app.MapGet("/", () => Results.Ok(new
 {
     nome = "Beacon",
