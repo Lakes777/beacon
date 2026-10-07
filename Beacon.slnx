@@ -2,8 +2,10 @@
   <Folder Name="/src/">
     <Project Path="src/Beacon.Api/Beacon.Api.csproj" />
     <Project Path="src/Beacon.Contratos/Beacon.Contratos.csproj" />
+    <Project Path="src/Beacon.Estatisticas/Beacon.Estatisticas.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Beacon.Api.Tests/Beacon.Api.Tests.csproj" />
+    <Project Path="tests/Beacon.Estatisticas.Tests/Beacon.Estatisticas.Tests.csproj" />
   </Folder>
 </Solution>
