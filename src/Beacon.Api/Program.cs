@@ -1,5 +1,6 @@
 using Beacon.Api.Banco;
 using Beacon.Api.Cache;
+using Beacon.Api.Contas;
 using Beacon.Api.Estatisticas;
 using Beacon.Api.Links;
 using Beacon.Api.Mensageria;
@@ -7,6 +8,13 @@ using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
 
+// "definir-senha <nome>" cria a conta do painel ou troca a senha (ver ComandoDefinirSenha) em vez de subir a API
+var (contaParaDefinir, usoErrado) = ComandoDefinirSenha.Interpretar(args);
+if (usoErrado is not null)
+{
+    Console.Error.WriteLine(usoErrado);
+    return 1;
+}
 var builder = WebApplication.CreateBuilder(args);
 
 // Melhor a API nem subir do que subir sem banco e falhar no primeiro pedido
@@ -72,6 +80,9 @@ builder.Services.AddHealthChecks()
     .AddCheck<SaudeDoRedis>("redis")
     .AddCheck<SaudeDoRabbitMQ>("rabbitmq");
 
+// Login do painel (cookie) e o limite de tentativas de login
+builder.Services.AdicionarLogin(builder.Configuration);
+
 // Erros no formato padrão "problem details" (RFC 9457), como o ProblemDetail do Vigil
 builder.Services.AddProblemDetails();
 
@@ -86,6 +97,11 @@ using (var escopo = app.Services.CreateScope())
     escopo.ServiceProvider.GetRequiredService<BeaconContexto>().Database.Migrate();
 }
 
+if (contaParaDefinir is not null)
+{
+    return await ComandoDefinirSenha.Rodar(app.Services, contaParaDefinir);
+}
+
 // Erro inesperado vira um 500 em JSON, sem mostrar detalhes internos. Um pedido malformado
 // (corpo vazio, JSON quebrado) vira 400: no ambiente Development o ASP.NET lança uma exceção
 // para esses casos, e sem o seletor abaixo ela viraria 500.
@@ -95,17 +111,24 @@ app.UseExceptionHandler(new ExceptionHandlerOptions
 });
 // Respostas de erro sem corpo (400, 404, 415...) também saem em problem details
 app.UseStatusCodePages();
+// Quem é (lê o cookie), o que pode (a rota pede login?) e quantas vezes (limite do /api/sessao)
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseRateLimiter();
 
-app.MapOpenApi();
-app.MapScalarApiReference("/docs", opcoes => opcoes.WithTitle("Beacon"));
+// Toda rota pede login (a política padrão em AdicionarLogin); estas são as públicas
+app.MapOpenApi().AllowAnonymous();
+app.MapScalarApiReference("/docs", opcoes => opcoes.WithTitle("Beacon")).AllowAnonymous();
 
-app.MapHealthChecks("/saude");
+app.MapHealthChecks("/saude").AllowAnonymous();
+app.MapearSessao();
 app.MapearLinks();
 app.MapearEstatisticas();
 app.MapGet("/", () => Results.Ok(new
 {
     nome = "Beacon",
     descricao = "Encurtador de links com estatísticas de cliques",
-}));
+})).AllowAnonymous();
 
-app.Run();
+await app.RunAsync();
+return 0;

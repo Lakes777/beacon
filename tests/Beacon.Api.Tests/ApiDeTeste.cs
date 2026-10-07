@@ -1,5 +1,9 @@
+using System.Net.Http.Json;
+using Beacon.Api.Banco;
+using Beacon.Api.Contas;
 using Beacon.Api.Mensageria;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
@@ -21,6 +25,13 @@ public class ApiDeTeste : WebApplicationFactory<Program>, IAsyncLifetime
     private readonly RedisContainer redis = new RedisBuilder("redis:8-alpine").Build();
     // Sem o painel de administração (o "-management" do compose): os testes não precisam dele
     private readonly RabbitMqContainer rabbitmq = new RabbitMqBuilder("rabbitmq:4-alpine").Build();
+
+    /// <summary>A conta que os testes usam para entrar no painel (criada ao subir).</summary>
+    public const string Usuario = "teste";
+    public const string Senha = "senha-dos-testes";
+
+    /// <summary>O cookie de uma sessão aberta ao subir, reaproveitado por ClienteLogado.</summary>
+    private string cookieDaSessao = "";
 
     /// <summary>Para os testes que simulam o Redis fora do ar usarem o mesmo banco.</summary>
     public string ConexaoDoBanco => banco.GetConnectionString();
@@ -44,6 +55,39 @@ public class ApiDeTeste : WebApplicationFactory<Program>, IAsyncLifetime
             }
             await Task.Delay(50);
         }
+
+        await using (var escopo = Services.CreateAsyncScope())
+        {
+            await RegrasDeConta.DefinirSenha(escopo.ServiceProvider.GetRequiredService<BeaconContexto>(),
+                escopo.ServiceProvider.GetRequiredService<IPasswordHasher<Usuario>>(), Usuario, Senha);
+        }
+        var resposta = await CreateClient().PostAsJsonAsync("/api/sessao", new Login(Usuario, Senha));
+        resposta.EnsureSuccessStatusCode();
+        // "beacon_sessao=...; expires=...; path=/api; ..." -> só o "nome=valor"
+        cookieDaSessao = resposta.Headers.GetValues("Set-Cookie").Single().Split(';')[0];
+    }
+
+    /// <summary>Um cliente já logado (as rotas de /api/links pedem login).</summary>
+    public HttpClient ClienteLogado(bool seguirRedirecionamentos = true)
+    {
+        // Sem o controle de cookies do cliente: o cookie vai fixo em todo pedido
+        var cliente = CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = seguirRedirecionamentos,
+            HandleCookies = false,
+        });
+        cliente.DefaultRequestHeaders.Add("Cookie", cookieDaSessao);
+        return cliente;
+    }
+
+    /// <summary>Entra pela rota de login numa outra API (as criadas com WithWebHostBuilder) e devolve o cliente logado.</summary>
+    public static async Task<HttpClient> Entrar(WebApplicationFactory<Program> fabrica, bool seguirRedirecionamentos = true)
+    {
+        // Este cliente guarda os cookies recebidos e os manda de volta, como um navegador
+        var cliente = fabrica.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = seguirRedirecionamentos });
+        var resposta = await cliente.PostAsJsonAsync("/api/sessao", new Login(Usuario, Senha));
+        resposta.EnsureSuccessStatusCode();
+        return cliente;
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -54,6 +98,8 @@ public class ApiDeTeste : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("ConnectionStrings:Banco", banco.GetConnectionString());
         builder.UseSetting("ConnectionStrings:Redis", redis.GetConnectionString());
         builder.UseSetting("ConnectionStrings:RabbitMQ", rabbitmq.GetConnectionString());
+        // Os testes fazem muitos logins seguidos; o limite em si é testado em SessaoTest com outro valor
+        builder.UseSetting("Login:TentativasPorMinuto", "100000");
     }
 
     public override async ValueTask DisposeAsync()

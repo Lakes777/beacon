@@ -34,15 +34,19 @@ na fila e são contados quando ele voltar.
 - [x] **2. Links:** criar (código escolhido ou aleatório), listar, editar, apagar e redirecionar em `/r/{codigo}`; documentação em `/docs`
 - [x] **3. Cache:** Redis na frente do redirecionamento, com invalidação quando o link muda e sem quebrar se o Redis cair
 - [x] **4. Estatísticas:** cada clique vira uma mensagem no RabbitMQ; um segundo programa a consome, descobre navegador, sistema, aparelho e origem e grava sem contar em dobro
-- [ ] 5. Login do painel (as rotas de /api/links passam a pedir login)
+- [x] **5. Login:** conta única com senha (PBKDF2), sessão por cookie, limite de tentativas; toda rota de `/api` pede login, `/r/` continua pública
 - [ ] 6. Painel com gráficos, com identidade visual própria
-- [ ] 7. Publicação com Docker (com `UseForwardedHeaders` e `AllowedHosts`: hoje a `urlCurta` usa o
-  endereço e o esquema do pedido, que atrás do proxy seriam os internos)
+- [ ] 7. Publicação com Docker. Pendências: `UseForwardedHeaders` e `AllowedHosts` (hoje a `urlCurta`, o
+  `Secure` do cookie e o IP do limite de login usam o pedido, que atrás do proxy seria o interno) e as chaves
+  do Data Protection num volume (sem isso, cada nova versão da imagem desloga todo mundo)
 
 ## Rotas
 
 | Método | Rota | O que faz |
 |---|---|---|
+| `POST` | `/api/sessao` | Entra: `usuario` e `senha`; devolve o cookie da sessão (público, com limite de tentativas) |
+| `GET` | `/api/sessao` | Quem está logado |
+| `DELETE` | `/api/sessao` | Sai (público) |
 | `POST` | `/api/links` | Cria um link: `destino` obrigatório, `codigo` opcional (sem ele, um aleatório de 7 caracteres) |
 | `GET` | `/api/links` | Lista os links, do mais novo ao mais antigo |
 | `GET` | `/api/links/{codigo}` | Busca um link |
@@ -53,10 +57,14 @@ na fila e são contados quando ele voltar.
 | `GET` | `/saude` | `Healthy` com tudo no ar; `Degraded` (200) sem o Redis ou o RabbitMQ; `Unhealthy` (503) sem o banco |
 | `GET` | `/docs` | Página para testar a API no navegador (Scalar, a partir do OpenAPI em `/openapi/v1.json`) |
 
-Por enquanto as rotas de `/api/links` não pedem login: o painel com login chega na fase 5, antes de publicar.
+Toda rota de `/api` pede login (401 sem ele), menos entrar e sair. São públicas só `/r/{codigo}`,
+`/saude`, `/docs` e `/openapi/v1.json`.
 
 ```bash
-curl -X POST localhost:8090/api/links -H 'Content-Type: application/json' \
+# entra e guarda o cookie em sessao.txt (a conta é criada com o comando definir-senha, abaixo)
+curl -c sessao.txt -X POST localhost:8090/api/sessao -H 'Content-Type: application/json' \
+  -d '{"usuario": "andre", "senha": "..."}'
+curl -b sessao.txt -X POST localhost:8090/api/links -H 'Content-Type: application/json' \
   -d '{"destino": "https://lakes777.github.io", "codigo": "portfolio"}'
 # {"codigo":"portfolio","destino":"https://lakes777.github.io","ativo":true,...,"urlCurta":"http://localhost:8090/r/portfolio"}
 ```
@@ -72,6 +80,7 @@ Erros vêm no formato padrão *problem details* (RFC 9457): 400 com os campos e 
 | API | ASP.NET Core (Minimal APIs) | Spring Boot (`@RestController`) |
 | Banco | PostgreSQL 17 + Entity Framework Core (Npgsql) | PostgreSQL + JPA/Hibernate |
 | Cache | Redis 8 (StackExchange.Redis) | (o Vigil não tem cache) |
+| Login | Autenticação por cookie + `PasswordHasher` (PBKDF2) + `RateLimiter` do ASP.NET | Spring Security |
 | Fila de mensagens | RabbitMQ 4 (RabbitMQ.Client 7) | (o Vigil não tem fila) |
 | Serviço em segundo plano | Worker Service (`BackgroundService`) | `@Scheduled` |
 | User-Agent | MyCSharp.HttpUserAgentParser + lista própria de robôs | |
@@ -92,6 +101,13 @@ dotnet run --project src/Beacon.Estatisticas    # em outro terminal: o serviço 
 curl localhost:8090/saude                  # "Healthy" quando a API e o banco estão no ar
 ```
 
+Para entrar no painel, crie a conta (o mesmo comando troca a senha depois). A senha é pedida no
+terminal, sem aparecer na tela:
+
+```bash
+dotnet run --project src/Beacon.Api -- definir-senha andre
+```
+
 As migrações rodam sozinhas quando a API sobe. Para criar uma nova depois de mudar as classes:
 
 ```bash
@@ -110,6 +126,27 @@ Precisa do Docker rodando: o Testcontainers sobe o Postgres sozinho.
 Os testes sobem a API inteira em memória (`WebApplicationFactory`) ligada a um **Postgres de verdade**
 num contêiner (Testcontainers), criado uma vez para todos os testes. O CI também confere a formatação
 com `dotnet format`.
+
+## Login
+
+O Beacon é de uma pessoa só, então não há cadastro: a conta é criada pelo comando `definir-senha`, por
+quem tem acesso ao servidor. O resto fica com o que o ASP.NET já traz:
+
+- **Senha:** guardada só como hash PBKDF2 com sal (`PasswordHasher`, o mesmo do ASP.NET Identity), com
+  12 a 128 caracteres. O limite de cima existe porque o PBKDF2 calcula sobre a senha inteira.
+- **Sessão:** cookie `beacon_sessao` cifrado pelo Data Protection, válido por 7 dias e renovado com o
+  uso. `HttpOnly` (um script na página não o lê), `SameSite=Strict` (não vai em pedidos que partem de
+  outro site, o que barra CSRF) e `Path=/api` (não viaja nos cliques de `/r/`). Segunda camada contra CSRF: um
+  formulário de outro site só envia GET e POST, e não em JSON; um `fetch` com JSON, `PUT` ou `DELETE` precisaria
+  da permissão do CORS, que a API não dá.
+- **Trocar a senha derruba as sessões abertas:** a conta tem um carimbo que muda a cada troca e vai
+  dentro do cookie. A cada pedido o carimbo é conferido no banco, e um cookie com o carimbo velho deixa de valer.
+- **Seguro por padrão:** a política de autorização padrão pede login, e as rotas públicas dizem
+  `AllowAnonymous`. Uma rota nova esquecida nasce protegida, e não aberta.
+- **Adivinhação:** 10 tentativas de login por minuto por IP (`RateLimiter`, 429 com `Retry-After`); em IPv6,
+  por bloco /64, que é o que um servidor alugado costuma ter.
+  Usuário inexistente e senha errada dão a mesma resposta, no mesmo tempo (o hash é conferido
+  mesmo sem conta), para não revelar quais nomes existem.
 
 ## Cache
 

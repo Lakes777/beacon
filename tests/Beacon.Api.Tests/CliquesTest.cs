@@ -16,7 +16,7 @@ public class CliquesTest(ApiDeTeste api)
 {
     private static CancellationToken Cancelar => TestContext.Current.CancellationToken;
 
-    private readonly HttpClient cliente = api.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+    private readonly HttpClient cliente = api.ClienteLogado(seguirRedirecionamentos: false);
 
     private static string CodigoUnico() => "q-" + Guid.NewGuid().ToString("N")[..10];
 

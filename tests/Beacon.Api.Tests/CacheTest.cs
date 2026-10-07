@@ -14,7 +14,7 @@ public class CacheTest(ApiDeTeste api)
 {
     private static CancellationToken Cancelar => TestContext.Current.CancellationToken;
 
-    private readonly HttpClient cliente = api.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+    private readonly HttpClient cliente = api.ClienteLogado(seguirRedirecionamentos: false);
 
     private static string CodigoUnico() => "c-" + Guid.NewGuid().ToString("N")[..10];
 
@@ -113,7 +113,7 @@ public class CacheTest(ApiDeTeste api)
         // Mesma API e mesmo banco, mas o Redis aponta para uma porta onde não há nada
         await using var semRedis = api.WithWebHostBuilder(b =>
             b.UseSetting("ConnectionStrings:Redis", "127.0.0.1:1"));
-        var outroCliente = semRedis.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var outroCliente = await ApiDeTeste.Entrar(semRedis, seguirRedirecionamentos: false);
         await outroCliente.GetAsync($"/r/{codigo}", Cancelar);   // o primeiro pedido abre a conexão
 
         var relogio = System.Diagnostics.Stopwatch.StartNew();

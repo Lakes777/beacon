@@ -12,7 +12,7 @@ public class LinksTest(ApiDeTeste api)
     private static CancellationToken Cancelar => TestContext.Current.CancellationToken;
 
     // Sem seguir redirecionamentos: o teste quer ver o 302 e o Location
-    private readonly HttpClient cliente = api.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+    private readonly HttpClient cliente = api.ClienteLogado(seguirRedirecionamentos: false);
 
     private static string CodigoUnico() => "t-" + Guid.NewGuid().ToString("N")[..10];
 

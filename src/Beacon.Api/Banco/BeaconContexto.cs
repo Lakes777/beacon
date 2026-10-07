@@ -1,3 +1,4 @@
+using Beacon.Api.Contas;
 using Beacon.Api.Estatisticas;
 using Beacon.Api.Links;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,8 @@ public class BeaconContexto(DbContextOptions<BeaconContexto> opcoes) : DbContext
     public DbSet<Link> Links => Set<Link>();
 
     public DbSet<Clique> Cliques => Set<Clique>();
+
+    public DbSet<Usuario> Usuarios => Set<Usuario>();
 
     protected override void OnModelCreating(ModelBuilder modelo)
     {
@@ -40,6 +43,14 @@ public class BeaconContexto(DbContextOptions<BeaconContexto> opcoes) : DbContext
             clique.Property(c => c.Origem).HasMaxLength(255);
             // As contas são sempre de um link num período
             clique.HasIndex(c => new { c.Codigo, c.Momento });
+        });
+
+        modelo.Entity<Usuario>(usuario =>
+        {
+            usuario.ToTable("usuario");
+            usuario.Property(u => u.Nome).HasMaxLength(Contas.RegrasDeConta.TamanhoMaximoDoNome);
+            usuario.Property(u => u.CriadoEm).HasDefaultValueSql("now()");
+            usuario.HasIndex(u => u.Nome).IsUnique();
         });
     }
 }

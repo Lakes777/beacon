@@ -17,7 +17,7 @@ public class EstatisticasTest(ApiDeTeste api)
 {
     private static CancellationToken Cancelar => TestContext.Current.CancellationToken;
 
-    private readonly HttpClient cliente = api.CreateClient();
+    private readonly HttpClient cliente = api.ClienteLogado();
 
     private static readonly TimeZoneInfo Brasilia = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
 

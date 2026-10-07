@@ -28,6 +28,7 @@ public static class LinkRotas
 
         app.MapGet("/r/{codigo}", Redirecionar)
             .WithTags("Redirecionamento")
+            .AllowAnonymous()
             .WithSummary("Leva ao destino do link (302); 404 se não existe ou está desativado");
     }
 
