@@ -9,10 +9,9 @@ conta quantas pessoas clicaram, quando, de onde e por qual aparelho. A ideia nas
 real: colocando um link diferente no currículo de cada vaga, no LinkedIn e no GitHub, dá para saber se
 alguém abriu o portfólio e por qual caminho chegou.
 
-É o meu primeiro projeto em **C# com .NET**, e também vai ser o primeiro com **RabbitMQ** (fila de mensagens)
-e **Redis** (cache), nas fases 3 e 4.
+É o meu primeiro projeto em **C# com .NET**, com **RabbitMQ** (fila de mensagens) e **Redis** (cache).
 
-## Como vai funcionar
+## Como funciona
 
 ```
  clique no link curto
@@ -34,7 +33,7 @@ na fila e são contados quando ele voltar.
 - [x] **1. Esqueleto:** ASP.NET Core 10, PostgreSQL com Entity Framework Core e migrações, `/saude`, testes com Testcontainers, CI
 - [x] **2. Links:** criar (código escolhido ou aleatório), listar, editar, apagar e redirecionar em `/r/{codigo}`; documentação em `/docs`
 - [x] **3. Cache:** Redis na frente do redirecionamento, com invalidação quando o link muda e sem quebrar se o Redis cair
-- [ ] 4. RabbitMQ e o serviço de estatísticas (sem contar o mesmo clique duas vezes)
+- [x] **4. Estatísticas:** cada clique vira uma mensagem no RabbitMQ; um segundo programa a consome, descobre navegador, sistema, aparelho e origem e grava sem contar em dobro
 - [ ] 5. Login do painel e filtro de robôs (prévias do LinkedIn e do WhatsApp não contam)
 - [ ] 6. Painel com gráficos, com identidade visual própria
 - [ ] 7. Publicação com Docker (com `UseForwardedHeaders` e `AllowedHosts`: hoje a `urlCurta` usa o
@@ -48,9 +47,10 @@ na fila e são contados quando ele voltar.
 | `GET` | `/api/links` | Lista os links, do mais novo ao mais antigo |
 | `GET` | `/api/links/{codigo}` | Busca um link |
 | `PUT` | `/api/links/{codigo}` | Troca o `destino`; `ativo` opcional (omitido, mantém) |
-| `DELETE` | `/api/links/{codigo}` | Apaga um link |
+| `DELETE` | `/api/links/{codigo}` | Apaga um link e os cliques dele |
+| `GET` | `/api/links/{codigo}/estatisticas?dias=30` | Cliques por dia (horário de Brasília), navegador, sistema, aparelho e origem; robôs contados à parte |
 | `GET` | `/r/{codigo}` | Leva ao destino (302); 404 se não existe ou está desativado. O cabeçalho `X-Beacon-Cache` diz se veio do Redis (`HIT`) ou do banco (`MISS`) |
-| `GET` | `/saude` | `Healthy` com banco e Redis no ar; `Degraded` (200) sem o Redis; `Unhealthy` (503) sem o banco |
+| `GET` | `/saude` | `Healthy` com tudo no ar; `Degraded` (200) sem o Redis ou o RabbitMQ; `Unhealthy` (503) sem o banco |
 | `GET` | `/docs` | Página para testar a API no navegador (Scalar, a partir do OpenAPI em `/openapi/v1.json`) |
 
 Por enquanto as rotas de `/api/links` não pedem login: o painel com login chega na fase 5, antes de publicar.
@@ -72,6 +72,9 @@ Erros vêm no formato padrão *problem details* (RFC 9457): 400 com os campos e 
 | API | ASP.NET Core (Minimal APIs) | Spring Boot (`@RestController`) |
 | Banco | PostgreSQL 17 + Entity Framework Core (Npgsql) | PostgreSQL + JPA/Hibernate |
 | Cache | Redis 8 (StackExchange.Redis) | (o Vigil não tem cache) |
+| Fila de mensagens | RabbitMQ 4 (RabbitMQ.Client 7) | (o Vigil não tem fila) |
+| Serviço em segundo plano | Worker Service (`BackgroundService`) | `@Scheduled` |
+| User-Agent | MyCSharp.HttpUserAgentParser + lista própria de robôs | |
 | Migrações | Migrações do EF Core, aplicadas ao subir | Flyway |
 | Testes | xUnit v3 + `WebApplicationFactory` + Testcontainers | JUnit + `@SpringBootTest` + Testcontainers |
 | Dependências | NuGet | Maven |
@@ -83,8 +86,9 @@ Precisa do [.NET 10 SDK](https://dotnet.microsoft.com/download) e do Docker.
 ```bash
 git clone https://github.com/Lakes777/beacon.git
 cd beacon
-docker compose up -d                       # Postgres na porta 5434 e Redis na 6379
-dotnet run --project src/Beacon.Api        # API em http://localhost:8090
+docker compose up -d                            # Postgres (5434), Redis (6379) e RabbitMQ (5672)
+dotnet run --project src/Beacon.Api             # API em http://localhost:8090
+dotnet run --project src/Beacon.Estatisticas    # em outro terminal: o serviço que consome os cliques
 curl localhost:8090/saude                  # "Healthy" quando a API e o banco estão no ar
 ```
 
@@ -138,6 +142,33 @@ Detalhes:
   (longo demais, com símbolos) responde 404 na hora, sem criar chave no Redis nem consultar o banco.
 - **`X-Beacon-Cache` fora da produção:** ele diria a qualquer visitante se aquele link foi clicado
   nos últimos minutos.
+
+## Estatísticas e fila
+
+São dois programas que conversam só pela fila (o contrato fica em `src/Beacon.Contratos`):
+
+- **API (`Beacon.Api`):** o clique em `/r/{codigo}` entrega uma mensagem `CliqueRegistrado` a uma fila
+  em memória e redireciona na hora. Um serviço em segundo plano publica no RabbitMQ, com mensagem
+  persistente e confirmação do broker; se o RabbitMQ estiver fora, segura a mensagem e tenta de novo.
+  A fila em memória tem limite (10 mil): cheia, descarta e avisa, para nunca segurar o clique.
+- **Serviço de estatísticas (`Beacon.Estatisticas`):** consome a fila (`ack` manual), classifica o
+  User-Agent e o Referer e grava com `INSERT ... ON CONFLICT (id) DO NOTHING`. Só depois de gravar
+  confirma a mensagem (`ack`).
+
+Por que assim:
+
+- **"Pelo menos uma vez":** o RabbitMQ pode entregar a mesma mensagem de novo (ex.: o serviço caiu
+  depois de gravar e antes do `ack`). Cada clique tem um `Id` gerado na API e usado como chave
+  primária, então a repetição não conta em dobro (consumidor *idempotente*).
+- **Se o serviço de estatísticas cair, nada se perde:** os cliques ficam na fila (durável) e são
+  gravados quando ele voltar. Se o banco cair, a mensagem volta para a fila com espera crescente.
+- **Mensagem inválida vai para a "dead letter"** (`beacon.estatisticas.mortos`) em vez de travar a
+  fila ou sumir: dá para olhar depois no painel do RabbitMQ (http://localhost:15672).
+- **Robôs à parte:** prévias de link (LinkedIn, WhatsApp, Slack...) e robôs de busca "clicam" sozinhos.
+  São gravados, mas ficam fora das contas (aparecem só no total `robos`). Detectados por uma lista
+  própria antes da biblioteca, que não conhece todas as prévias.
+- **Só conta o que veio depois da criação do link:** um código apagado e criado de novo não herda
+  cliques antigos que ainda estavam na fila.
 
 ## Decisões
 
