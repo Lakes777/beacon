@@ -1,3 +1,4 @@
+using Beacon.Api.Estatisticas;
 using Beacon.Api.Links;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +12,8 @@ public class BeaconContexto(DbContextOptions<BeaconContexto> opcoes) : DbContext
 {
     public DbSet<Link> Links => Set<Link>();
 
+    public DbSet<Clique> Cliques => Set<Clique>();
+
     protected override void OnModelCreating(ModelBuilder modelo)
     {
         modelo.Entity<Link>(link =>
@@ -23,6 +26,20 @@ public class BeaconContexto(DbContextOptions<BeaconContexto> opcoes) : DbContext
             link.Property(l => l.CriadoEm).HasDefaultValueSql("now()");
             // Dois links com o mesmo código: o banco recusa, mesmo se dois pedidos chegarem juntos
             link.HasIndex(l => l.Codigo).IsUnique();
+        });
+
+        modelo.Entity<Clique>(clique =>
+        {
+            clique.ToTable("clique");
+            // O Id vem da mensagem, não do banco
+            clique.Property(c => c.Id).ValueGeneratedNever();
+            clique.Property(c => c.Codigo).HasMaxLength(64);
+            clique.Property(c => c.Navegador).HasMaxLength(64);
+            clique.Property(c => c.Sistema).HasMaxLength(64);
+            clique.Property(c => c.Aparelho).HasMaxLength(16);
+            clique.Property(c => c.Origem).HasMaxLength(255);
+            // As contas são sempre de um link num período
+            clique.HasIndex(c => new { c.Codigo, c.Momento });
         });
     }
 }

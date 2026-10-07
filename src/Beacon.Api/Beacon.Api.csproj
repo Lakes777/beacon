@@ -21,4 +21,8 @@
     <InternalsVisibleTo Include="Beacon.Api.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Beacon.Contratos\Beacon.Contratos.csproj" />
+  </ItemGroup>
+
 </Project>

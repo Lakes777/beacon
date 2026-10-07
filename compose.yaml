@@ -1,5 +1,6 @@
-# Postgres e Redis para rodar a API no seu computador: docker compose up -d
-# Postgres na porta 5434 (a 5433 é do Vigil); Redis na 6379
+# Postgres, Redis e RabbitMQ para rodar o Beacon no seu computador: docker compose up -d
+# Postgres na porta 5434 (a 5433 é do Vigil); Redis na 6379; RabbitMQ na 5672, com o painel
+# de administração em http://localhost:15672 (usuário e senha: beacon)
 services:
   banco:
     image: postgres:17-alpine
@@ -23,5 +24,20 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
 
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: beacon
+      RABBITMQ_DEFAULT_PASS: beacon
+    ports:
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - filas:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+
 volumes:
   dados:
+  filas:

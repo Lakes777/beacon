@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/Beacon.Api/Beacon.Api.csproj" />
+    <Project Path="src/Beacon.Contratos/Beacon.Contratos.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Beacon.Api.Tests/Beacon.Api.Tests.csproj" />
