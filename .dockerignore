@@ -1,0 +1,10 @@
+# Só o código vai para a montagem da imagem: sem as pastas de build, testes e o Git
+**/bin
+**/obj
+tests
+TestResults
+docs
+.git
+.github
+.claude
+**/*.md

@@ -5,6 +5,8 @@ using Beacon.Api.Estatisticas;
 using Beacon.Api.Links;
 using Beacon.Api.Mensageria;
 using Beacon.Api.Painel;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using StackExchange.Redis;
@@ -84,6 +86,29 @@ builder.Services.AddHealthChecks()
 // Login do painel (cookie) e o limite de tentativas de login
 builder.Services.AdicionarLogin(builder.Configuration);
 
+// O cookie da sessão é cifrado com as chaves do Data Protection. Por padrão elas ficam dentro do
+// contêiner e somem a cada versão nova da imagem (e todo mundo é deslogado). Em produção, uma pasta
+// num volume do Docker guarda as chaves entre as versões.
+if (builder.Configuration["DataProtection:Pasta"] is { Length: > 0 } pastaDasChaves)
+{
+    builder.Services.AddDataProtection()
+        .SetApplicationName("Beacon")
+        .PersistKeysToFileSystem(new DirectoryInfo(pastaDasChaves));
+}
+
+// Atrás do proxy (o Caddy, em produção), o pedido chega à API vindo do Caddy, em http. Os cabeçalhos
+// X-Forwarded-For e X-Forwarded-Proto contam o IP de quem acessou e que era https: sem lê-los, o limite
+// de login contaria todo mundo como um IP só, o cookie sairia sem Secure e a urlCurta viria com http://.
+// Só a rede do proxy é aceita: de qualquer outro lugar, os cabeçalhos seriam mentira fácil de forjar.
+if (builder.Configuration["Proxy:Rede"] is { Length: > 0 } redeDoProxy)
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(opcoes =>
+    {
+        opcoes.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        opcoes.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(redeDoProxy));
+    });
+}
+
 // Erros no formato padrão "problem details" (RFC 9457), como o ProblemDetail do Vigil
 builder.Services.AddProblemDetails();
 
@@ -102,6 +127,9 @@ if (contaParaDefinir is not null)
 {
     return await ComandoDefinirSenha.Rodar(app.Services, contaParaDefinir);
 }
+
+// Primeiro de tudo: os próximos (limite de login, cookie, urlCurta) já veem o IP e o https verdadeiros
+app.UseForwardedHeaders();
 
 // Erro inesperado vira um 500 em JSON, sem mostrar detalhes internos. Um pedido malformado
 // (corpo vazio, JSON quebrado) vira 400: no ambiente Development o ASP.NET lança uma exceção

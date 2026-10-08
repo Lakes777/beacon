@@ -1,0 +1,134 @@
+# Produção na VM ARM da Oracle (1 núcleo, 6 GB). Segredos no arquivo .env ao lado (fora do git):
+# DOMINIO, DB_SENHA e FILA_SENHA. Só o Caddy tem porta aberta; o resto conversa pela rede interna.
+x-logs: &logs
+  # Sem rotação, o arquivo de log do Docker cresce sem limite e enche o disco
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  banco:
+    image: postgres:17-alpine
+    logging: *logs
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: beacon
+      POSTGRES_USER: beacon
+      POSTGRES_PASSWORD: ${DB_SENHA:?defina DB_SENHA no .env}
+    volumes:
+      - dados:/var/lib/postgresql/data
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "beacon", "-d", "beacon"]
+      interval: 10s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    logging: *logs
+    restart: unless-stopped
+    # Só cache: sem gravar em disco (se reiniciar, os links voltam a ser lidos do banco) e com teto
+    # de memória, apagando os menos usados quando encher
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+
+  rabbitmq:
+    # Sem o painel de administração (o "-management"): menos memória e nada a mais exposto
+    image: rabbitmq:4-alpine
+    logging: *logs
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: beacon
+      RABBITMQ_DEFAULT_PASS: ${FILA_SENHA:?defina FILA_SENHA no .env}
+    volumes:
+      # A fila é durável: cliques que ainda não viraram estatística sobrevivem a um reinício
+      - filas:/var/lib/rabbitmq
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      start_period: 30s
+      retries: 10
+
+  api:
+    # Ao religar a VM, o Docker sobe tudo junto e ignora o depends_on: a API pode chegar antes do banco,
+    # falhar na migração e reiniciar algumas vezes (restart) até ele aceitar conexões
+    image: beacon-api:latest
+    # "GSS Encryption Mode=Disable" nas conexões: o Npgsql tentaria a criptografia do Kerberos (que não
+    # usamos e cuja biblioteca a imagem não tem) e escreveria um erro no log a cada conexão nova
+    logging: *logs
+    restart: unless-stopped
+    depends_on:
+      banco: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    environment:
+      ConnectionStrings__Banco: Host=banco;Database=beacon;Username=beacon;Password=${DB_SENHA};GSS Encryption Mode=Disable
+      ConnectionStrings__Redis: redis:6379
+      ConnectionStrings__RabbitMQ: amqp://beacon:${FILA_SENHA}@rabbitmq:5672
+      # Só responde a pedidos para o domínio (e localhost, para o healthcheck abaixo)
+      AllowedHosts: ${DOMINIO};localhost
+      # A rede "interna" abaixo: os cabeçalhos X-Forwarded-* só valem vindos dela (do Caddy)
+      Proxy__Rede: 172.30.0.0/24
+    volumes:
+      # As chaves que cifram o cookie: sobrevivem a uma imagem nova (ninguém é deslogado). Ficam sem
+      # cifrar no volume (a API avisa isso no log ao subir, "No XML encryptor configured"): cifrá-las
+      # pediria outra chave guardada em algum lugar da mesma VM, o que não protegeria de verdade.
+      - chaves:/chaves
+    mem_limit: 512m
+    healthcheck:
+      # A imagem não tem curl nem wget: o próprio bash abre a conexão e confere o "200" do /saude
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /saude HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 15s
+      start_period: 30s
+      retries: 5
+
+  estatisticas:
+    image: beacon-estatisticas:latest
+    logging: *logs
+    restart: unless-stopped
+    # Depois da API: é ela que cria as tabelas (migrações) que este serviço grava
+    depends_on:
+      api: { condition: service_healthy }
+    environment:
+      ConnectionStrings__Banco: Host=banco;Database=beacon;Username=beacon;Password=${DB_SENHA};GSS Encryption Mode=Disable
+      ConnectionStrings__RabbitMQ: amqp://beacon:${FILA_SENHA}@rabbitmq:5672
+    mem_limit: 256m
+
+  caddy:
+    image: caddy:2-alpine
+    logging: *logs
+    restart: unless-stopped
+    # Espera a API ficar saudável: sem isso, quem abrisse a página durante a subida via um erro 502
+    depends_on:
+      api: { condition: service_healthy }
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    environment:
+      DOMINIO: ${DOMINIO:?defina DOMINIO no .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_dados:/data
+      - caddy_config:/config
+    mem_limit: 64m
+
+networks:
+  default:
+    name: beacon_interna
+    # Faixa fixa: a API confia nos cabeçalhos X-Forwarded-* só de dentro dela (Proxy__Rede)
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  dados:
+  filas:
+  chaves:
+  caddy_dados:
+  caddy_config:

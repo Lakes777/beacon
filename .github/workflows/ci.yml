@@ -19,3 +19,14 @@ jobs:
       - run: dotnet build --no-restore
       - name: Testes (Testcontainers sobe o Postgres)
         run: dotnet test --no-build
+
+  imagens:
+    # Confere que as imagens de produção montam, para ARM (a VM da Oracle) como na publicação
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Imagem da API
+        run: docker buildx build --platform linux/arm64 --target api .
+      - name: Imagem do serviço de estatísticas
+        run: docker buildx build --platform linux/arm64 --target estatisticas .

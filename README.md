@@ -38,9 +38,7 @@ na fila e são contados quando ele voltar.
 - [x] **4. Estatísticas:** cada clique vira uma mensagem no RabbitMQ; um segundo programa a consome, descobre navegador, sistema, aparelho e origem e grava sem contar em dobro
 - [x] **5. Login:** conta única com senha (PBKDF2), sessão por cookie, limite de tentativas; toda rota de `/api` pede login, `/r/` continua pública
 - [x] **6. Painel:** página servida pela própria API em `/`, com gráficos de cliques por dia, origem, aparelho, navegador e sistema; criar, editar e apagar links; identidade visual própria
-- [ ] 7. Publicação com Docker. Pendências: `UseForwardedHeaders` e `AllowedHosts` (hoje a `urlCurta`, o
-  `Secure` do cookie e o IP do limite de login usam o pedido, que atrás do proxy seria o interno) e as chaves
-  do Data Protection num volume (sem isso, cada nova versão da imagem desloga todo mundo)
+- [ ] **7. Publicação:** imagens Docker para ARM, seis contêineres numa VM grátis da Oracle, HTTPS pelo Caddy, backup diário (pronta e testada; falta a VM ARM, que a Oracle ainda não liberou)
 
 ## Rotas
 
@@ -143,6 +141,76 @@ biblioteca e sem etapa de build: os gráficos são SVG desenhados pelo script.
   estilos, fontes e conexões), `X-Frame-Options: DENY` e `nosniff`. Tudo que vem da API entra na página
   como texto (`textContent`), nunca como HTML, então um destino com `<script>` aparece escrito, sem rodar.
 - **No celular:** a lista e o detalhe ficam um embaixo do outro; tocar numa barra do gráfico mostra o dia.
+
+## Publicação
+
+Roda numa VM ARM grátis da Oracle Cloud (1 núcleo Ampere, 6 GB), com seis contêineres (`deploy/compose.yaml`):
+
+| Contêiner | O que faz | Memória medida |
+|---|---|---|
+| `caddy` | recebe na porta 443, pega e renova sozinho o certificado HTTPS (Let's Encrypt) | ~25 MB |
+| `api` | o Beacon (redirecionamento, API e painel) | ~240 MB |
+| `estatisticas` | consome a fila e grava os cliques | ~40 MB |
+| `banco` | Postgres 17 | ~40 MB |
+| `rabbitmq` | a fila dos cliques, em disco (sobrevive a um reinício) | ~85 MB |
+| `redis` | cache, só em memória (64 MB no máximo, apaga os menos usados) | ~6 MB |
+
+- **Imagens para ARM montadas num PC x86, sem emulação** (`Dockerfile`): o SDK roda na arquitetura de quem
+  monta (`--platform=$BUILDPLATFORM`) e o `dotnet publish -a arm64` gera o programa para a VM; as etapas ARM
+  não têm nenhum `RUN`, só cópias, então nada precisa rodar como ARM durante a montagem (nem no CI). As duas
+  imagens partem da mesma base (`aspnet:10.0-noble`, com o fuso de Brasília), rodam sem root e só têm o
+  programa publicado, sem o SDK e sem o código-fonte.
+- **Atrás do proxy:** o Caddy avisa o IP e o `https` verdadeiros (`X-Forwarded-For` e `-Proto`), e a API só
+  acredita nesses cabeçalhos vindos da rede interna do Docker (`Proxy__Rede`). Assim o cookie sai com
+  `Secure`, a `urlCurta` vem com `https://` e o limite de login conta o IP de quem acessou, e não o do Caddy.
+  `AllowedHosts` recusa pedidos para outro domínio.
+- **Chaves do cookie num volume:** sem isso, cada versão nova da imagem trocaria as chaves e deslogaria todo mundo.
+- **Só o Caddy tem porta aberta.** Banco, fila e cache conversam só pela rede interna, com as senhas no
+  `.env` da VM (fora do Git).
+- Logs com rotação (10 MB × 3 por contêiner).
+- **Backup:** todo dia às 3h o cron da VM grava o banco (7 dias na VM), e o PC traz uma cópia para fora dela
+  (`deploy/trazer-backup.sh`, pelo Agendador de Tarefas do Windows, 30 dias em `D:\Backups\Beacon`): se a VM
+  sumir, o backup não vai junto.
+- **VM reiniciada:** o Docker religa tudo junto (`restart: unless-stopped`) e ignora a ordem do `depends_on`.
+  A API pode chegar antes do banco e reiniciar algumas vezes até ele aceitar conexões; em menos de um minuto
+  o site volta sozinho.
+
+Publicar uma versão nova (monta as imagens aqui, envia pela conexão SSH e reinicia). Só publica com tudo
+commitado, e cada imagem leva o número do commit:
+
+```bash
+deploy/publicar.sh
+```
+
+Voltar uma versão (a VM guarda as 3 últimas de cada imagem):
+
+```bash
+docker images beacon-api                       # na VM: as versões guardadas
+docker tag beacon-api:<commit> beacon-api:latest
+docker tag beacon-estatisticas:<commit> beacon-estatisticas:latest
+docker compose up -d
+```
+
+Restaurar um backup (apaga o que está no banco e põe o do arquivo):
+
+```bash
+docker compose stop api estatisticas
+docker compose exec -T banco psql -U beacon -d postgres -c "DROP DATABASE beacon WITH (FORCE)" -c "CREATE DATABASE beacon OWNER beacon"
+gunzip -c backups/beacon-AAAA-MM-DD.sql.gz | docker compose exec -T banco psql -U beacon -d beacon
+docker compose start api estatisticas
+```
+
+Primeira vez na VM:
+
+1. Instalar o Docker: `sudo apt install docker.io docker-compose-v2` e `sudo usermod -aG docker ubuntu`.
+2. Abrir as portas 80 e 443 na *Security List* da Oracle e no firewall da VM.
+3. Criar `~/beacon/.env` (só o dono lê: `chmod 600`) com `DOMINIO`, `DB_SENHA` e `FILA_SENHA`. Gere as
+   senhas com `openssl rand -hex 32` (só letras e números): elas vão no meio da conexão do banco e do
+   endereço `amqp://` da fila, onde um `;`, `@` ou `/` quebraria tudo. O Postgres e o RabbitMQ só leem a
+   senha na primeira subida; trocar no `.env` depois não muda a senha guardada no volume.
+4. Rodar `deploy/publicar.sh` e criar a conta do painel:
+   `docker compose exec api dotnet Beacon.Api.dll definir-senha <nome>`.
+5. Backup: `0 3 * * * ~/beacon/backup.sh` no `crontab -e`.
 
 ## Login
 
