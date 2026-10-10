@@ -187,4 +187,28 @@ public class LinksTest(ApiDeTeste api)
         var docs = await api.CreateClient().GetAsync("/docs", Cancelar);
         Assert.Equal(HttpStatusCode.OK, docs.StatusCode);
     }
+
+    [Fact]
+    public async Task QrCodeLevaAoLinkCurto()
+    {
+        var codigo = CodigoUnico();
+        var link = await Criar("https://lakes777.github.io", codigo);
+
+        // Maiúsculas no endereço também funcionam, como no /r/
+        var resposta = await cliente.GetAsync($"/api/links/{codigo.ToUpperInvariant()}/qr", Cancelar);
+
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        Assert.Equal("image/svg+xml", resposta.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("nosniff", resposta.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.StartsWith("default-src 'none'", resposta.Headers.GetValues("Content-Security-Policy").Single());
+        // O desenho é exatamente o do endereço curto que o painel mostra (e não o do destino)
+        Assert.Equal(CodigoQr.Svg(link.UrlCurta), await resposta.Content.ReadAsStringAsync(Cancelar));
+    }
+
+    [Fact]
+    public async Task QrCodeDeLinkQueNaoExisteDa404()
+    {
+        var resposta = await cliente.GetAsync($"/api/links/{CodigoUnico()}/qr", Cancelar);
+        Assert.Equal(HttpStatusCode.NotFound, resposta.StatusCode);
+    }
 }

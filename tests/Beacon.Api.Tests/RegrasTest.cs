@@ -84,4 +84,26 @@ public class RegrasTest
         // 400 "ç" cabem em 2048 caracteres, mas viram 400 x 6 = 2400 depois de codificados
         Assert.NotNull(Destinos.Validar("https://exemplo.com/" + new string('ç', 400)).Problema);
     }
+
+    [Fact]
+    public void QrCodeEmSvgPretoNoBrancoSemTamanhoFixo()
+    {
+        var svg = CodigoQr.Svg("https://beacon.exemplo.com/r/portfolio");
+
+        Assert.StartsWith("<svg", svg.TrimStart());
+        Assert.Contains("viewBox", svg);
+        Assert.DoesNotContain("width=", svg.Split('>')[0]);   // quem decide o tamanho é a página
+        Assert.Contains("#000000", svg);
+        Assert.Contains("#ffffff", svg);
+        Assert.DoesNotContain("<script", svg);
+    }
+
+    [Fact]
+    public void QrCodeMudaComOEnderecoEEDeterministico()
+    {
+        var um = CodigoQr.Svg("https://beacon.exemplo.com/r/um");
+
+        Assert.Equal(um, CodigoQr.Svg("https://beacon.exemplo.com/r/um"));
+        Assert.NotEqual(um, CodigoQr.Svg("https://beacon.exemplo.com/r/dois"));
+    }
 }

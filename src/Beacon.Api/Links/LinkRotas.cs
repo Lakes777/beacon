@@ -25,6 +25,7 @@ public static class LinkRotas
         links.MapGet("/{codigo}", Buscar).WithSummary("Busca um link pelo código");
         links.MapPut("/{codigo}", Editar).WithSummary("Muda o destino e, se informado, ativa ou desativa o link");
         links.MapDelete("/{codigo}", Apagar).WithSummary("Apaga um link");
+        links.MapGet("/{codigo}/qr", Qr).WithSummary("QR code do link curto, em SVG");
 
         app.MapGet("/r/{codigo}", Redirecionar)
             .WithTags("Redirecionamento")
@@ -118,6 +119,21 @@ public static class LinkRotas
     {
         var link = await Achar(banco, codigo, cancelar);
         return link is null ? TypedResults.NotFound() : TypedResults.Ok(Resposta(link, requisicao));
+    }
+
+    private static async Task<Results<ContentHttpResult, NotFound>> Qr(
+        string codigo, BeaconContexto banco, HttpRequest requisicao, HttpResponse resposta, CancellationToken cancelar)
+    {
+        var link = await Achar(banco, codigo, cancelar);
+        if (link is null)
+        {
+            return TypedResults.NotFound();
+        }
+        // Aberto direto numa aba, o SVG não carrega nada nem roda script (hoje ele só tem retângulos)
+        resposta.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'";
+        resposta.Headers.XContentTypeOptions = "nosniff";
+        // O mesmo endereço que o painel mostra e copia: quem escaneia cai no /r/ e o clique é contado
+        return TypedResults.Content(CodigoQr.Svg(UrlCurta(link, requisicao)), "image/svg+xml");
     }
 
     private static async Task<Results<Ok<LinkResposta>, NotFound, ValidationProblem>> Editar(
@@ -250,6 +266,9 @@ public static class LinkRotas
         erro.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     private static LinkResposta Resposta(Link link, HttpRequest requisicao) => new(
-        link.Codigo, link.Destino, link.Ativo, link.CriadoEm,
-        $"{requisicao.Scheme}://{requisicao.Host}{requisicao.PathBase}/r/{link.Codigo}");
+        link.Codigo, link.Destino, link.Ativo, link.CriadoEm, UrlCurta(link, requisicao));
+
+    /// <summary>Monta pelo endereço por onde o pedido chegou (por trás do Caddy, o domínio público).</summary>
+    private static string UrlCurta(Link link, HttpRequest requisicao) =>
+        $"{requisicao.Scheme}://{requisicao.Host}{requisicao.PathBase}/r/{link.Codigo}";
 }

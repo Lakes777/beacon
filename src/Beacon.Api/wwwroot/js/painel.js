@@ -214,6 +214,7 @@ async function abrirDetalhe(codigo) {
   situacao.textContent = link.ativo ? "ativo" : "desativado";
   situacao.className = `estado ${link.ativo ? "ativo" : "inativo"}`;
   $("d-url").textContent = link.urlCurta;
+  if ($("d-qr").dataset.codigo !== codigo) mostrarQr(false);   // outro link: o QR do anterior some
   $("d-destino").textContent = link.destino;
   $("d-destino").href = link.destino;
   $("d-total").textContent = numeros.total.toLocaleString("pt-BR");
@@ -247,6 +248,33 @@ $("d-copiar").addEventListener("click", async () => {
     getSelection().selectAllChildren($("d-url"));
     avisar("Selecionado: aperte Ctrl+C para copiar");
   }
+});
+
+// O QR só é pedido quando aberto: a lista de links não gera imagem nenhuma à toa
+function mostrarQr(abrir) {
+  const figura = $("d-qr");
+  const codigo = estado.selecionado;
+  figura.hidden = !abrir;
+  $("d-ver-qr").setAttribute("aria-expanded", String(abrir));
+  if (!abrir || figura.dataset.codigo === codigo) return;
+  figura.dataset.codigo = codigo;
+  const endereco = `/api/links/${encodeURIComponent(codigo)}/qr`;
+  $("d-qr-imagem").src = endereco;
+  $("d-qr-imagem").alt = `QR code de /r/${codigo}`;
+  $("d-qr-baixar").href = endereco;
+  $("d-qr-baixar").download = `beacon-${codigo}.svg`;
+}
+
+$("d-ver-qr").addEventListener("click", () => mostrarQr($("d-qr").hidden));
+// Sessão vencida (401) deixa a imagem quebrada: esquece o código para o próximo clique pedir de novo
+// e confere a sessão, que mostra a tela de entrada se for o caso
+$("d-qr-imagem").addEventListener("error", () => {
+  delete $("d-qr").dataset.codigo;
+  mostrarQr(false);
+  comSessao(async () => {
+    await api.sessao();   // sem sessão, lança SemSessao e o comSessao mostra a entrada
+    avisar("Não foi possível gerar o QR code", true);
+  }).catch(() => avisar("Não foi possível gerar o QR code", true));
 });
 
 $("form-editar").addEventListener("submit", async e => {

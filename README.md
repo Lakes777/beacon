@@ -52,6 +52,7 @@ na fila e são contados quando ele voltar.
 | `GET` | `/api/links/{codigo}` | Busca um link |
 | `PUT` | `/api/links/{codigo}` | Troca o `destino`; `ativo` opcional (omitido, mantém) |
 | `DELETE` | `/api/links/{codigo}` | Apaga um link e os cliques dele |
+| `GET` | `/api/links/{codigo}/qr` | QR code do link curto em SVG (preto no branco, com margem, tamanho livre) |
 | `GET` | `/api/estatisticas?dias=30` | Todos os links juntos: total, cliques por dia e cliques de cada link (o topo do painel) |
 | `GET` | `/api/links/{codigo}/estatisticas?dias=30` | Cliques por dia (horário de Brasília), navegador, sistema, aparelho e origem; robôs contados à parte |
 | `GET` | `/r/{codigo}` | Leva ao destino (302); 404 se não existe ou está desativado. O cabeçalho `X-Beacon-Cache` diz se veio do Redis (`HIT`) ou do banco (`MISS`) |
@@ -140,6 +141,11 @@ biblioteca e sem etapa de build: os gráficos são SVG desenhados pelo script.
 - **Segurança:** os arquivos saem com `Content-Security-Policy` que só aceita o próprio Beacon (scripts,
   estilos, fontes e conexões), `X-Frame-Options: DENY` e `nosniff`. Tudo que vem da API entra na página
   como texto (`textContent`), nunca como HTML, então um destino com `<script>` aparece escrito, sem rodar.
+- **QR code:** no detalhe de um link, o botão QR code mostra o código para a câmera do celular e deixa
+  baixar o SVG (para imprimir num currículo ou cartaz). Ele aponta para o link curto, não para o destino:
+  quem escaneia passa pelo `/r/` e o clique entra nas estatísticas. É gerado na hora pelo QRCoder, só
+  quando o botão é aberto. O endereço no QR é o do navegador: para imprimir, gere pelo endereço público, e
+  não por `localhost`.
 - **No celular:** a lista e o detalhe ficam um embaixo do outro; tocar numa barra do gráfico mostra o dia.
 
 ## Publicação

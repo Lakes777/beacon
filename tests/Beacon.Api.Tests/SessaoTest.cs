@@ -57,6 +57,7 @@ public class SessaoTest(ApiDeTeste api)
             anonimo.PutAsJsonAsync("/api/links/qualquer", new EdicaoDeLink("https://exemplo.com", null), Cancelar),
             anonimo.DeleteAsync("/api/links/qualquer", Cancelar),
             anonimo.GetAsync("/api/links/qualquer/estatisticas", Cancelar),
+            anonimo.GetAsync("/api/links/qualquer/qr", Cancelar),
             anonimo.GetAsync("/api/sessao", Cancelar),
         };
         foreach (var resposta in await Task.WhenAll(pedidos))

@@ -180,6 +180,12 @@ label { font-size: .82rem; color: var(--nevoa); }
 .cabeca-detalhe .prefixo { color: var(--nevoa); font-weight: 400; }
 .url-curta { display: flex; align-items: center; gap: 10px; margin-top: 8px; min-width: 0; }
 .url-curta code { font: .84rem var(--codigo); color: var(--luz-clara); overflow-wrap: anywhere; min-width: 0; }
+/* Fundo branco de verdade (não o do painel): a câmera precisa do contraste e da margem clara */
+.qr { display: flex; align-items: center; gap: 16px; margin: 12px 0 4px; }
+.qr img { width: 160px; height: 160px; flex: none; background: #fff; border-radius: 6px; }
+.qr figcaption { display: grid; gap: 10px; justify-items: start; font-size: .84rem; color: var(--nevoa); }
+.qr .botao { text-decoration: none; }
+@media (max-width: 480px) { .qr { flex-direction: column; align-items: flex-start; } }
 .destino { margin: 6px 0 4px; font-size: .86rem; color: var(--nevoa); overflow-wrap: anywhere; }
 
 .quebras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 22px; margin-top: 22px; }

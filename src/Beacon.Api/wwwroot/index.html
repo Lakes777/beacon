@@ -102,7 +102,15 @@
           <div class="url-curta">
             <code id="d-url"></code>
             <button type="button" class="botao pequeno" id="d-copiar">Copiar</button>
+            <button type="button" class="botao pequeno" id="d-ver-qr" aria-expanded="false" aria-controls="d-qr">QR code</button>
           </div>
+          <figure class="qr" id="d-qr" hidden>
+            <img id="d-qr-imagem" alt="" width="160" height="160">
+            <figcaption>
+              Aponte a câmera do celular: leva ao link curto, e o clique conta nas estatísticas.
+              <a class="botao pequeno" id="d-qr-baixar">Baixar SVG</a>
+            </figcaption>
+          </figure>
           <p class="destino">leva a <a id="d-destino" target="_blank" rel="noopener noreferrer"></a></p>
 
           <div class="numeros dois">
