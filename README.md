@@ -13,7 +13,9 @@ alguém abriu o portfólio e por qual caminho chegou.
 
 É o meu primeiro projeto em **C# com .NET**, com **RabbitMQ** (fila de mensagens) e **Redis** (cache).
 
-![Painel do Beacon: cliques dos últimos 30 dias, lista de links e o detalhe de um link com origem, aparelho, navegador e sistema](docs/painel.png)
+![Beacon em uso: os cliques de todos os links nos últimos 30 dias, o detalhe de um link com origem, aparelho, navegador e sistema, o período de 90 dias e o QR code](docs/demo.gif)
+
+*Demonstração com dados de exemplo. O painel no ar é de uso pessoal e pede login.*
 
 ## Como funciona
 
