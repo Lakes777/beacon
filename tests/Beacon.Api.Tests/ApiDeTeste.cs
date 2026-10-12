@@ -30,6 +30,9 @@ public class ApiDeTeste : WebApplicationFactory<Program>, IAsyncLifetime
     public const string Usuario = "teste";
     public const string Senha = "senha-dos-testes";
 
+    /// <summary>A chave de integração (Integracao:Chave) configurada nesta API.</summary>
+    public const string ChaveDeIntegracao = "chave-de-integracao-dos-testes-0123456789";
+
     /// <summary>O cookie de uma sessão aberta ao subir, reaproveitado por ClienteLogado.</summary>
     private string cookieDaSessao = "";
 
@@ -80,6 +83,14 @@ public class ApiDeTeste : WebApplicationFactory<Program>, IAsyncLifetime
         return cliente;
     }
 
+    /// <summary>Um cliente que entra pela chave de integração (como o Pursuit), sem cookie.</summary>
+    public HttpClient ClienteComChave(string chave = ChaveDeIntegracao)
+    {
+        var cliente = CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        cliente.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", chave);
+        return cliente;
+    }
+
     /// <summary>Entra pela rota de login numa outra API (as criadas com WithWebHostBuilder) e devolve o cliente logado.</summary>
     public static async Task<HttpClient> Entrar(WebApplicationFactory<Program> fabrica, bool seguirRedirecionamentos = true)
     {
@@ -100,6 +111,7 @@ public class ApiDeTeste : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("ConnectionStrings:RabbitMQ", rabbitmq.GetConnectionString());
         // Os testes fazem muitos logins seguidos; o limite em si é testado em SessaoTest com outro valor
         builder.UseSetting("Login:TentativasPorMinuto", "100000");
+        builder.UseSetting("Integracao:Chave", ChaveDeIntegracao);
     }
 
     public override async ValueTask DisposeAsync()

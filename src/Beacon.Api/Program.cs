@@ -19,6 +19,7 @@ if (usoErrado is not null)
     return 1;
 }
 var builder = WebApplication.CreateBuilder(args);
+ChaveDeIntegracao.Conferir(builder.Configuration);
 
 // Melhor a API nem subir do que subir sem banco e falhar no primeiro pedido
 var conexao = builder.Configuration.GetConnectionString("Banco")

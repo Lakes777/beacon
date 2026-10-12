@@ -41,6 +41,7 @@ na fila e são contados quando ele voltar.
 - [x] **5. Login:** conta única com senha (PBKDF2), sessão por cookie, limite de tentativas; toda rota de `/api` pede login, `/r/` continua pública
 - [x] **6. Painel:** página servida pela própria API em `/`, com gráficos de cliques por dia, origem, aparelho, navegador e sistema; criar, editar e apagar links; identidade visual própria
 - [x] **7. Publicação:** imagens Docker para ARM, seis contêineres numa VM grátis da Oracle, HTTPS pelo Caddy, backup diário
+- [x] **8. Integração:** chave para o [Pursuit](https://github.com/Lakes777/pursuit) criar um link por candidatura e ler os cliques (só lê e cria)
 
 ## Rotas
 
@@ -61,7 +62,8 @@ na fila e são contados quando ele voltar.
 | `GET` | `/saude` | `Healthy` com tudo no ar; `Degraded` (200) sem o Redis ou o RabbitMQ; `Unhealthy` (503) sem o banco |
 | `GET` | `/docs` | Página para testar a API no navegador (Scalar, a partir do OpenAPI em `/openapi/v1.json`) |
 
-Toda rota de `/api` pede login (401 sem ele), menos entrar e sair. São públicas só `/r/{codigo}`,
+Toda rota de `/api` pede login (401 sem ele), menos entrar e sair. Outro programa pode usar a API com
+a chave de integração no lugar do login (veja [Chave de integração](#chave-de-integração)). São públicas só `/r/{codigo}`,
 `/saude`, `/docs`, `/openapi/v1.json` e os arquivos do painel (que não têm dados: os números vêm da API).
 
 ```bash
@@ -240,6 +242,31 @@ quem tem acesso ao servidor. O resto fica com o que o ASP.NET já traz:
   por bloco /64, que é o que um servidor alugado costuma ter.
   Usuário inexistente e senha errada dão a mesma resposta, no mesmo tempo (o hash é conferido
   mesmo sem conta), para não revelar quais nomes existem.
+
+## Chave de integração
+
+O [Pursuit](https://github.com/Lakes777/pursuit) cria um link curto para cada candidatura e lê os
+cliques dele. Para isso não usa o login do painel: manda uma chave no cabeçalho.
+
+```bash
+curl -H "Authorization: Bearer $CHAVE" https://.../api/links
+```
+
+- **Configurada em `Integracao:Chave`** (variável `Integracao__Chave`; no `.env` da VM, `INTEGRACAO_CHAVE`),
+  com pelo menos 32 caracteres (`openssl rand -hex 32`): a API não sobe com uma chave curta. Sem chave,
+  só o cookie vale.
+- **Só lê e cria links:** com a chave valem os `GET` e o `POST /api/links`; editar, desativar e apagar
+  dão 403. Ela fica em outra máquina, e se vazar não serve para apagar os links nem os cliques deles.
+  Com o cookie do painel junto, vale o painel.
+- **Separada da senha:** a senha fica só com quem usa o painel. Trocar a chave no `.env` e recriar o
+  contêiner (`docker compose up -d api`) corta o acesso do outro programa, sem deslogar ninguém, e trocar
+  a senha não quebra a integração.
+- **`Bearer` em maiúsculas ou minúsculas**, como diz o HTTP.
+- **Comparada em tempo constante** (os hashes SHA-256 das duas, com `CryptographicOperations.FixedTimeEquals`):
+  medir quanto a resposta demora não revela a chave aos poucos.
+- **Não abre sessão:** cada pedido leva a chave, e nenhum cookie é criado. Quem entra por ela aparece
+  como `integracao` em `GET /api/sessao`.
+- Chave errada dá 401 com `WWW-Authenticate: Bearer`.
 
 ## Cache
 

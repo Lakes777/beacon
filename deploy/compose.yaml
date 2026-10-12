@@ -1,5 +1,5 @@
 # Produção na VM ARM da Oracle (1 núcleo, 6 GB). Segredos no arquivo .env ao lado (fora do git):
-# DOMINIO, DB_SENHA e FILA_SENHA. Só o Caddy tem porta aberta; o resto conversa pela rede interna.
+# DOMINIO, DB_SENHA e FILA_SENHA (e, opcional, INTEGRACAO_CHAVE). Só o Caddy tem porta aberta; o resto conversa pela rede interna.
 x-logs: &logs
   # Sem rotação, o arquivo de log do Docker cresce sem limite e enche o disco
   driver: json-file
@@ -74,6 +74,8 @@ services:
       AllowedHosts: ${DOMINIO};localhost
       # A rede "interna" abaixo: os cabeçalhos X-Forwarded-* só valem vindos dela (do Caddy)
       Proxy__Rede: 172.30.0.0/24
+      # Opcional: a chave com que o Pursuit usa a API (vazia = só o login do painel vale)
+      Integracao__Chave: ${INTEGRACAO_CHAVE:-}
     volumes:
       # As chaves que cifram o cookie: sobrevivem a uma imagem nova (ninguém é deslogado). Ficam sem
       # cifrar no volume (a API avisa isso no log ao subir, "No XML encryptor configured"): cifrá-las

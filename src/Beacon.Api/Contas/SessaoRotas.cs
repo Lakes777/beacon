@@ -62,11 +62,19 @@ public static class SessaoRotas
                     return Task.CompletedTask;
                 };
                 opcoes.Events.OnValidatePrincipal = ConferirCarimbo;
-            });
+            })
+            // Outro programa (o Pursuit) entra com uma chave no cabeçalho, sem cookie (ver ChaveDeIntegracao)
+            .AddScheme<AuthenticationSchemeOptions, ChaveDeIntegracao>(ChaveDeIntegracao.Esquema, null);
 
-        // Seguro por padrão: uma rota nova já nasce pedindo login; as públicas dizem AllowAnonymous
+        // Seguro por padrão: uma rota nova já nasce pedindo login (o cookie do painel ou a chave de
+        // integração); as públicas dizem AllowAnonymous
         servicos.AddAuthorizationBuilder()
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder(
+                    CookieAuthenticationDefaults.AuthenticationScheme, ChaveDeIntegracao.Esquema)
+                .RequireAuthenticatedUser()
+                // A chave só lê e cria links: um DELETE com ela dá 403
+                .RequireAssertion(contexto => ChaveDeIntegracao.PodeUsar(contexto.User, contexto.Resource as HttpContext))
+                .Build());
 
         // Contra quem tenta adivinhar a senha: poucas tentativas de login por minuto por endereço IP
         var tentativas = configuracao.GetValue("Login:TentativasPorMinuto", 10);
