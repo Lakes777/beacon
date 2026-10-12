@@ -226,6 +226,17 @@ Primeira vez na VM:
    `docker compose exec api dotnet Beacon.Api.dll definir-senha <nome>`.
 5. Backup: `0 3 * * * ~/beacon/backup.sh` no `crontab -e`.
 
+A demonstração (contêineres `api-demo` e `estatisticas-demo`, site `demo-beacon.159-112-189-95.sslip.io`) sobe
+junto no mesmo `docker compose`. Uma vez só, antes da primeira publicação com ela:
+
+1. No `.env`: `DOMINIO_DEMO` e `INTEGRACAO_CHAVE_DEMO` (outra chave, `openssl rand -hex 32`).
+2. O vhost da fila: `docker compose exec rabbitmq rabbitmqctl add_vhost demo` e
+   `docker compose exec rabbitmq rabbitmqctl set_permissions -p demo beacon ".*" ".*" ".*"`.
+3. O banco `beacon_demo` é criado pela migração da própria `api-demo` ao subir, e ela se semeia sozinha.
+4. A reposição de hora em hora, junto com a demo do Pursuit (primeiro o Beacon), no `crontab -e`:
+   `0 * * * * ~/repor-demos.sh >> ~/repor-demos.log 2>&1`, um script que roda
+   `cd ~/beacon && docker compose exec -T api-demo dotnet Beacon.Api.dll semear-demo` e depois a do Pursuit.
+
 ## Demonstração
 
 Uma segunda instância do Beacon, com dados de exemplo, onde qualquer pessoa entra sem senha para ver o

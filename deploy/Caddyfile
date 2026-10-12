@@ -10,5 +10,15 @@
 	}
 }
 
+# A demonstração (somente leitura), outra instância da API
+{$DOMINIO_DEMO} {
+	encode gzip
+	reverse_proxy api-demo:8080
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}
+
 # Outros projetos na mesma VM (o Pursuit) põem o site deles em ~/beacon/sites/ e recarregam o Caddy
 import /etc/caddy/sites/*.caddy

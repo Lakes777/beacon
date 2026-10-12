@@ -101,6 +101,48 @@ services:
       ConnectionStrings__RabbitMQ: amqp://beacon:${FILA_SENHA}@rabbitmq:5672
     mem_limit: 256m
 
+  # ---- Demonstração (somente leitura): a mesma imagem com Demo__Ativo, banco beacon_demo, outro
+  # database do Redis, outro vhost do RabbitMQ e chaves de cookie próprias. Nada encosta nos links reais.
+  api-demo:
+    image: beacon-api:latest
+    logging: *logs
+    restart: unless-stopped
+    depends_on:
+      banco: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      rabbitmq: { condition: service_healthy }
+    environment:
+      # O banco é criado pela migração ao subir (o usuário beacon pode criar bancos); o nome termina em
+      # _demo, que a semeadura exige
+      ConnectionStrings__Banco: Host=banco;Database=beacon_demo;Username=beacon;Password=${DB_SENHA};GSS Encryption Mode=Disable
+      ConnectionStrings__Redis: redis:6379,defaultDatabase=1
+      # O vhost "demo" é criado uma vez (ver "Demonstração" em Publicação, no README)
+      ConnectionStrings__RabbitMQ: amqp://beacon:${FILA_SENHA}@rabbitmq:5672/demo
+      AllowedHosts: ${DOMINIO_DEMO:?defina DOMINIO_DEMO no .env};localhost
+      Proxy__Rede: 172.30.0.0/24
+      # Chave própria da demo (a demo do Pursuit usa esta), diferente da real
+      Integracao__Chave: ${INTEGRACAO_CHAVE_DEMO:?defina INTEGRACAO_CHAVE_DEMO no .env}
+      Demo__Ativo: "true"
+    volumes:
+      - chaves_demo:/chaves
+    mem_limit: 384m
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /saude HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+      interval: 15s
+      start_period: 30s
+      retries: 5
+
+  estatisticas-demo:
+    image: beacon-estatisticas:latest
+    logging: *logs
+    restart: unless-stopped
+    depends_on:
+      api-demo: { condition: service_healthy }
+    environment:
+      ConnectionStrings__Banco: Host=banco;Database=beacon_demo;Username=beacon;Password=${DB_SENHA};GSS Encryption Mode=Disable
+      ConnectionStrings__RabbitMQ: amqp://beacon:${FILA_SENHA}@rabbitmq:5672/demo
+    mem_limit: 192m
+
   caddy:
     image: caddy:2-alpine
     logging: *logs
@@ -114,6 +156,7 @@ services:
       - "443:443/udp"   # HTTP/3
     environment:
       DOMINIO: ${DOMINIO:?defina DOMINIO no .env}
+      DOMINIO_DEMO: ${DOMINIO_DEMO:?defina DOMINIO_DEMO no .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       # Os sites dos outros projetos da VM (o Pursuit), importados pelo Caddyfile
@@ -134,5 +177,6 @@ volumes:
   dados:
   filas:
   chaves:
+  chaves_demo:
   caddy_dados:
   caddy_config:
