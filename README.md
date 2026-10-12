@@ -38,7 +38,7 @@ na fila e são contados quando ele voltar.
 - [x] **4. Estatísticas:** cada clique vira uma mensagem no RabbitMQ; um segundo programa a consome, descobre navegador, sistema, aparelho e origem e grava sem contar em dobro
 - [x] **5. Login:** conta única com senha (PBKDF2), sessão por cookie, limite de tentativas; toda rota de `/api` pede login, `/r/` continua pública
 - [x] **6. Painel:** página servida pela própria API em `/`, com gráficos de cliques por dia, origem, aparelho, navegador e sistema; criar, editar e apagar links; identidade visual própria
-- [ ] **7. Publicação:** imagens Docker para ARM, seis contêineres numa VM grátis da Oracle, HTTPS pelo Caddy, backup diário (pronta e testada; falta a VM ARM, que a Oracle ainda não liberou)
+- [x] **7. Publicação:** imagens Docker para ARM, seis contêineres numa VM grátis da Oracle, HTTPS pelo Caddy, backup diário
 
 ## Rotas
 
