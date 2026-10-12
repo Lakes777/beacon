@@ -1,3 +1,4 @@
+using Beacon.Api.Demo;
 using Beacon.Api.Banco;
 using Beacon.Api.Cache;
 using Beacon.Api.Mensageria;
@@ -34,13 +35,18 @@ public static class LinkRotas
     }
 
     private static async Task<Results<Created<LinkResposta>, ValidationProblem, ProblemHttpResult>> Criar(
-        NovoLink pedido, BeaconContexto banco, CacheDeLinks cache, HttpRequest requisicao, CancellationToken cancelar)
+        NovoLink pedido, BeaconContexto banco, CacheDeLinks cache, HttpRequest requisicao, IConfiguration configuracao,
+        CancellationToken cancelar)
     {
         var erros = new Dictionary<string, string[]>();
         var (destino, problemaDestino) = Destinos.Validar(pedido.Destino);
         if (problemaDestino is not null)
         {
             erros["destino"] = [problemaDestino];
+        }
+        else if (ModoDemo.Ativo(configuracao) && !ModoDemo.DestinoPermitido(destino!))
+        {
+            erros["destino"] = [ModoDemo.DestinoProibido];
         }
         var escolhido = pedido.Codigo is null ? null : Codigos.Normalizar(pedido.Codigo);
         if (escolhido is not null && Codigos.Problema(escolhido) is { } problemaCodigo)
@@ -138,9 +144,13 @@ public static class LinkRotas
 
     private static async Task<Results<Ok<LinkResposta>, NotFound, ValidationProblem>> Editar(
         string codigo, EdicaoDeLink pedido, BeaconContexto banco, CacheDeLinks cache, HttpRequest requisicao,
-        CancellationToken cancelar)
+        IConfiguration configuracao, CancellationToken cancelar)
     {
         var (destino, problema) = Destinos.Validar(pedido.Destino);
+        if (problema is null && ModoDemo.Ativo(configuracao) && !ModoDemo.DestinoPermitido(destino!))
+        {
+            problema = ModoDemo.DestinoProibido;
+        }
         if (problema is not null)
         {
             return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["destino"] = [problema] });

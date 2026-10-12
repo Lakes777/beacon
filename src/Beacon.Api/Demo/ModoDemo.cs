@@ -26,6 +26,24 @@ public static class ModoDemo
 
     public static bool Ativo(IConfiguration configuracao) => configuracao.GetValue(Configuracao, false);
 
+    public const string DestinoProibido = "Na demonstração, os links só levam ao portfólio (lakes777.github.io) ou ao GitHub do André (github.com/Lakes777).";
+
+    /// <summary>
+    /// Na demonstração, um link só pode levar a um site do André, mesmo criado pela chave de integração
+    /// (a demo do Pursuit): se a chave da demo vazasse, ainda assim ninguém faria um /r/ para um golpe.
+    /// </summary>
+    public static bool DestinoPermitido(string destino) =>
+        Uri.TryCreate(destino, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && uri.Port == 443
+        && (uri.Host == "lakes777.github.io"
+            || (uri.Host == "github.com" && (uri.AbsolutePath == "/Lakes777" || uri.AbsolutePath.StartsWith("/Lakes777/", StringComparison.Ordinal))));
+
+    /// <summary>
+    /// A semeadura apaga tudo: além de Demo:Ativo, o banco precisa se chamar algo terminado em "_demo"
+    /// (ex.: beacon_demo). Ligar a flag por engano no contêiner real não apaga o banco de verdade.
+    /// </summary>
+    public static bool BancoDeDemo(string? nomeDoBanco) =>
+        nomeDoBanco is not null && nomeDoBanco.EndsWith("_demo", StringComparison.Ordinal);
+
     public static bool EhVisitante(ClaimsPrincipal usuario) => usuario.HasClaim(ClaimDoPapel, Visitante);
 
     /// <summary>

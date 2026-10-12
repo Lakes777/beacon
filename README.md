@@ -241,18 +241,21 @@ painel funcionando. Ela é **somente leitura**: um encurtador aberto ao público
 - **Só lê:** a política padrão ganhou uma regra, como a da chave de integração: o visitante só faz
   `GET` (a lista, os números, o QR). `POST`, `PUT` e `DELETE` dão 403 com o motivo em problem details,
   e o painel esconde *Novo link*, editar e apagar. Sair continua valendo. A chave de integração segue
-  como está (lê e cria): a demo do Pursuit cria links na demo do Beacon.
-- **Dados de exemplo:** `semear-demo` apaga links e cliques e põe 7 links (alguns com nome, outros com
-  código aleatório, como os que o Pursuit cria) e 250 cliques nos últimos 30 dias, mais perto de hoje,
+  como está (lê e cria): a demo do Pursuit cria links na demo do Beacon. **Na demo, todo link leva só
+  ao meu portfólio ou ao meu GitHub,** mesmo criado pela chave (outro destino dá 400): se a chave da demo
+  vazasse, ainda assim ninguém faria um `/r/` para um golpe. A demo usa uma chave própria, diferente da real.
+- **Dados de exemplo:** `semear-demo` apaga links e cliques e põe 10 links (alguns com nome, outros com
+  código aleatório, como os que o Pursuit cria, e os 3 das fichas da demo do Pursuit: k7qm2xz, rt4pw9a e
+  b3nvx8e) e 261 cliques nos últimos 30 dias, mais perto de hoje,
   com origens, aparelhos e navegadores variados e ~10% de prévias do LinkedIn. Destinos só do
   meu portfólio e do meu GitHub. Grava direto no banco (sem passar pela fila), numa transação, e apaga
   a cópia de cada link no Redis. Sempre o mesmo conjunto (semente fixa), com as datas contadas a partir de agora.
-  **Só roda com `Demo:Ativo` ligado:** no banco real, o comando sai com erro sem tocar em nada. Uma demo
-  com o banco vazio se semeia sozinha ao subir.
-- **Volta ao original de hora em hora:** um cron na VM roda o comando, o que desfaz os links criados
-  pela demo do Pursuit:
-  `0 * * * * cd ~/beacon && docker compose exec -T api-demo dotnet Beacon.Api.dll semear-demo`
-  (o nome do contêiner depende do compose da demo).
+  **Só roda com `Demo:Ativo` ligado e num banco com nome terminado em `_demo`:** no banco real, o
+  comando sai com erro sem tocar em nada, mesmo que a flag seja ligada por engano. Uma demo com o banco
+  vazio se semeia sozinha ao subir.
+- **Volta ao original de hora em hora,** junto com a demo do Pursuit, no mesmo minuto e nesta ordem
+  (primeiro o Beacon, depois o Pursuit): os links que um visitante criar lá somem junto com as fichas
+  deles, sem deixar ficha apontando para link apagado. A linha do cron fica em "Publicação".
 - **Instância separada:** outros contêineres `api` e `estatisticas`, com `Demo__Ativo=true`, banco
   `beacon_demo`, outro database do Redis (ex.: `redis:6379,defaultDatabase=1`), outro vhost do
   RabbitMQ e outra pasta de chaves do cookie. Nada da demo encosta nos links de verdade.

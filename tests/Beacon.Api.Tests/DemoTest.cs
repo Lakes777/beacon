@@ -283,4 +283,66 @@ public class DemoTest(ApiDeTeste api, DemoDeTeste demo) : IClassFixture<DemoDeTe
         return uri.Scheme == "https" && (uri.Host == "lakes777.github.io"
             || (uri.Host == "github.com" && (uri.AbsolutePath == "/Lakes777" || uri.AbsolutePath.StartsWith("/Lakes777/", StringComparison.Ordinal))));
     }
+
+    // ---- Travas da demonstração: contra golpe e contra apagar o banco de verdade ----
+
+    private HttpClient ComChave()
+    {
+        var cliente = demo.Fabrica.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        cliente.DefaultRequestHeaders.Authorization = new("Bearer", ApiDeTeste.ChaveDeIntegracao);
+        return cliente;
+    }
+
+    [Fact]
+    public async Task NaDemoAChaveSoCriaLinkParaOsSitesDoAndre()
+    {
+        var cliente = ComChave();
+
+        var golpe = await cliente.PostAsJsonAsync("/api/links", new NovoLink("https://golpe.exemplo/banco", null), Cancelar);
+        var portfolio = await cliente.PostAsJsonAsync("/api/links", new NovoLink("https://lakes777.github.io", null), Cancelar);
+
+        Assert.Equal(HttpStatusCode.BadRequest, golpe.StatusCode);
+        Assert.Contains("lakes777.github.io", await golpe.Content.ReadAsStringAsync(Cancelar));
+        Assert.Equal(HttpStatusCode.Created, portfolio.StatusCode);
+    }
+
+    [Fact]
+    public async Task VisitanteComAChaveJuntoContinuaSoLendo()
+    {
+        var cliente = demo.Fabrica.CreateClient();
+        Assert.Equal(HttpStatusCode.OK, (await cliente.PostAsync("/api/sessao/visitante", null, Cancelar)).StatusCode);
+        cliente.DefaultRequestHeaders.Authorization = new("Bearer", ApiDeTeste.ChaveDeIntegracao);
+
+        var resposta = await cliente.PostAsJsonAsync("/api/links", new NovoLink("https://lakes777.github.io", null), Cancelar);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resposta.StatusCode);
+    }
+
+    [Fact]
+    public async Task O403DaChaveNaoEOdoVisitante()
+    {
+        var resposta = await ComChave().DeleteAsync("/api/links/portfolio-linkedin", Cancelar);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resposta.StatusCode);
+        Assert.DoesNotContain("Somente leitura", await resposta.Content.ReadAsStringAsync(Cancelar));
+    }
+
+    [Theory]
+    [InlineData("https://lakes777.github.io/", true)]
+    [InlineData("https://github.com/Lakes777", true)]
+    [InlineData("https://github.com/Lakes777/beacon", true)]
+    [InlineData("https://github.com/Lakes7770", false)]
+    [InlineData("https://github.com/outro", false)]
+    [InlineData("http://lakes777.github.io/", false)]
+    [InlineData("https://lakes777.github.io.golpe.exemplo/", false)]
+    [InlineData("https://lakes777.github.io:8443/", false)]
+    public void DestinosPermitidosNaDemo(string destino, bool permitido) =>
+        Assert.Equal(permitido, ModoDemo.DestinoPermitido(destino));
+
+    [Theory]
+    [InlineData("beacon_demo", true)]
+    [InlineData("beacon", false)]
+    [InlineData("demo_beacon", false)]
+    [InlineData(null, false)]
+    public void SoBancoComNomeDeDemo(string? nome, bool demoOk) => Assert.Equal(demoOk, ModoDemo.BancoDeDemo(nome));
 }

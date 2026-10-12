@@ -70,7 +70,14 @@ public static class SemeaduraDaDemo
             return 1;
         }
         await using var escopo = servicos.CreateAsyncScope();
-        var (links, cliques) = await Semear(escopo.ServiceProvider.GetRequiredService<BeaconContexto>(),
+        var banco = escopo.ServiceProvider.GetRequiredService<BeaconContexto>();
+        if (!ModoDemo.BancoDeDemo(banco.Database.GetDbConnection().Database))
+        {
+            Console.Error.WriteLine($"{Comando} só roda num banco de demonstração (nome terminado em _demo): " +
+                "este parece o banco de verdade. Nada foi alterado.");
+            return 1;
+        }
+        var (links, cliques) = await Semear(banco,
             escopo.ServiceProvider.GetRequiredService<CacheDeLinks>(), DateTimeOffset.UtcNow);
         Console.WriteLine($"Demonstração semeada: {links} links e {cliques} cliques.");
         return 0;
@@ -81,6 +88,12 @@ public static class SemeaduraDaDemo
     {
         await using var escopo = servicos.CreateAsyncScope();
         var banco = escopo.ServiceProvider.GetRequiredService<BeaconContexto>();
+        if (!ModoDemo.BancoDeDemo(banco.Database.GetDbConnection().Database))
+        {
+            // A API sobe (o painel funciona), mas não semeia: o nome do banco diz que não é de demonstração
+            log.LogError("Demonstração ligada num banco sem _demo no nome: a semeadura não roda (confira ConnectionStrings__Banco)");
+            return;
+        }
         if (await banco.Links.AnyAsync())
         {
             return;
@@ -127,9 +140,12 @@ public static class SemeaduraDaDemo
         }
 
         await using var transacao = await banco.Database.BeginTransactionAsync(cancelar);
-        var antigos = await banco.Links.Select(l => l.Codigo).ToListAsync(cancelar);
         await banco.Cliques.ExecuteDeleteAsync(cancelar);
-        await banco.Links.ExecuteDeleteAsync(cancelar);
+        // Os códigos apagados vêm do próprio DELETE: lidos antes, um link criado entre a leitura e o
+        // DELETE (pela chave, na demo do Pursuit) seria apagado sem sair do Redis
+        var antigos = await banco.Database
+            .SqlQueryRaw<string>("delete from link returning codigo as \"Value\"")
+            .ToListAsync(cancelar);
         // De trás para frente: com a mesma data de criação, a lista (do mais novo ao mais antigo, pelo id)
         // mostra os links na ordem de Exemplos, os principais primeiro (os do Pursuit, mais novos, vêm antes)
         banco.Links.AddRange(Enumerable.Reverse(links));
