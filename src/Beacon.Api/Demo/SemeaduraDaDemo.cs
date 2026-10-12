@@ -32,8 +32,7 @@ public static class SemeaduraDaDemo
 
     /// <summary>
     /// Os links de exemplo: três escolhidos à mão e quatro aleatórios como os que o Pursuit cria por
-    /// candidatura. Três deles (k7qm2xz, rt4pw9a, b3nvx8e) são os das fichas da demo do Pursuit, que
-    /// aponta para esta: lá, a ficha mostra "Aberto N vezes" com estes cliques. Destinos só do próprio André: a demo nunca leva a um site de outra pessoa.
+    /// candidatura. Destinos só do próprio André: a demo nunca leva a um site de outra pessoa.
     /// Peso = parte dos cliques; Origens = de onde as pessoas chegam a ele (null = acesso direto).
     /// </summary>
     private static readonly LinkDeExemplo[] Exemplos =
@@ -41,9 +40,9 @@ public static class SemeaduraDaDemo
         new("portfolio-linkedin", Portfolio, true, 30, ["www.linkedin.com", "www.linkedin.com", "lnkd.in", null]),
         new("github-perfil", GitHub, true, 18, ["github.com", "github.com", "www.linkedin.com", null]),
         new("curriculo-geral", Portfolio, true, 16, ["mail.google.com", null, null]),
-        new("k7qm2xz", Portfolio, true, 13, ["mail.google.com", "www.linkedin.com", null]),
-        new("rt4pw9a", Portfolio, true, 10, ["mail.google.com", null]),
-        new("b3nvx8e", Portfolio, true, 8, ["www.linkedin.com", "lnkd.in", null]),
+        new("k7mqp2x", Portfolio, true, 13, ["mail.google.com", "www.linkedin.com", null]),
+        new("hw3tbnr", GitHub + "/beacon", true, 10, ["mail.google.com", null]),
+        new("p9fjdve", Portfolio, true, 8, ["www.linkedin.com", "lnkd.in", null]),
         // Uma candidatura encerrada: mostra o estado "desativado" na lista
         new("xr4sa8m", Portfolio, false, 5, ["mail.google.com", null]),
     ];
