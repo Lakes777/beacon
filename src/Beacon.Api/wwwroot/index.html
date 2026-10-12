@@ -26,16 +26,23 @@
     <form class="cartao-entrada" id="form-entrada" novalidate>
       <svg class="estrela-grande" aria-hidden="true"><use href="#estrela"/></svg>
       <h1>Beacon</h1>
-      <p class="sub">Entre para ver seus links e quem clicou neles.</p>
+      <p class="sub" id="sub-entrada">Entre para ver seus links e quem clicou neles.</p>
+      <!-- Só na demonstração (GET /api/demo): o visitante entra sem senha e só lê -->
+      <div class="visitante" id="bloco-visitante" hidden>
+        <button type="button" class="botao principal" id="entrar-visitante">Entrar como visitante</button>
+        <p class="divisor"><span>ou com a sua conta</span></p>
+      </div>
       <label for="usuario">Usuário</label>
       <input id="usuario" name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required>
       <label for="senha">Senha</label>
       <input id="senha" name="senha" type="password" autocomplete="current-password" required>
       <p class="erro" id="erro-entrada" role="alert" hidden></p>
-      <button type="submit" class="botao principal">Entrar</button>
+      <button type="submit" class="botao principal" id="botao-entrar">Entrar</button>
     </form>
   </main>
 
+  <!-- Fora do .painel para ocupar a largura toda da janela -->
+  <p class="faixa-demo" id="faixa-demo" hidden>Demonstração somente leitura: os dados de exemplo voltam ao original a cada hora.</p>
   <div class="painel" id="painel" hidden>
     <header class="topo">
       <div class="marca">

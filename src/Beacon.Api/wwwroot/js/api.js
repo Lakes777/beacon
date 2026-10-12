@@ -50,6 +50,8 @@ export const api = {
   sessao: () => pedir("GET", "/api/sessao"),
   entrar: (usuario, senha) => pedir("POST", "/api/sessao", { usuario, senha }),
   sair: () => pedir("DELETE", "/api/sessao"),
+  demo: () => pedir("GET", "/api/demo"),
+  visitante: () => pedir("POST", "/api/sessao/visitante"),
   links: () => pedir("GET", "/api/links"),
   resumo: dias => pedir("GET", `/api/estatisticas?dias=${dias}`),
   estatisticas: (codigo, dias) => pedir("GET", `/api/links/${encodeURIComponent(codigo)}/estatisticas?dias=${dias}`),

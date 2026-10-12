@@ -1,4 +1,5 @@
-// O painel do Beacon: entrar, ver os números, criar, editar e apagar links.
+// O painel do Beacon: entrar, ver os números, criar, editar e apagar links. Na demonstração, o
+// visitante entra sem senha e só vê: o que cria ou muda links fica escondido (a API recusa do mesmo jeito).
 import { api, SemSessao } from "./api.js";
 import { barrasPorDia, el, listaDeBarras } from "./graficos.js";
 
@@ -73,16 +74,37 @@ async function comSessao(acao) {
 }
 
 // ---------- entrada ----------
+// Pergunta logo ao abrir, junto com a sessão. Se a pergunta falhar, a tela de entrada fica a comum.
+const demo = api.demo().then(r => r.demo === true).catch(() => false);
+let ehDemo = false;
+
 function mostrarEntrada(mensagem) {
   $("carregando").hidden = true;
   $("painel").hidden = true;
+  $("faixa-demo").hidden = true;
   $("entrada").hidden = false;
   const erro = $("erro-entrada");
   erro.textContent = mensagem ?? "";
   erro.hidden = !mensagem;
   $("senha").value = "";
-  ($("usuario").value ? $("senha") : $("usuario")).focus();
+  // Na demonstração, entrar como visitante é o caminho principal; o "Entrar" com senha fica secundário
+  $("bloco-visitante").hidden = !ehDemo;
+  $("botao-entrar").classList.toggle("principal", !ehDemo);
+  $("sub-entrada").textContent = ehDemo
+    ? "Demonstração com dados de exemplo: dá para ver tudo, mas não criar nem mudar links."
+    : "Entre para ver seus links e quem clicou neles.";
+  if (ehDemo && !$("usuario").value) $("entrar-visitante").focus();
+  else ($("usuario").value ? $("senha") : $("usuario")).focus();
 }
+
+$("entrar-visitante").addEventListener("click", e => ocupado(e.currentTarget, async () => {
+  $("erro-entrada").hidden = true;
+  try {
+    await mostrarPainel(await api.visitante());
+  } catch (erro) {
+    mostrarErro($("erro-entrada"), erro);
+  }
+}));
 
 $("form-entrada").addEventListener("submit", async e => {
   e.preventDefault();
@@ -91,7 +113,7 @@ $("form-entrada").addEventListener("submit", async e => {
   $("erro-entrada").hidden = true;
   try {
     const sessao = await api.entrar($("usuario").value, $("senha").value);
-    await mostrarPainel(sessao.usuario);
+    await mostrarPainel(sessao);
   } catch (erro) {
     mostrarErro($("erro-entrada"), erro);
     $("senha").select();
@@ -108,8 +130,14 @@ $("sair").addEventListener("click", async () => {
 });
 
 // ---------- painel ----------
-async function mostrarPainel(usuario) {
-  $("nome-usuario").textContent = usuario;
+async function mostrarPainel(sessao) {
+  $("nome-usuario").textContent = sessao.usuario;
+  // Visitante: a faixa explica, e criar, editar e apagar somem (a API daria 403 de qualquer jeito)
+  const visitante = sessao.visitante === true;
+  $("faixa-demo").hidden = !visitante;
+  $("abrir-novo").hidden = visitante;
+  $("form-editar").hidden = visitante;
+  if (visitante) abrirNovo(false);
   $("carregando").hidden = true;
   $("entrada").hidden = true;
   $("painel").hidden = false;
@@ -361,9 +389,12 @@ document.addEventListener("visibilitychange", () => {
 
 // ---------- início: já tem sessão? ----------
 try {
-  const sessao = await api.sessao();
-  await mostrarPainel(sessao.usuario);
+  const [sessao] = await Promise.all([api.sessao(), demo.then(ligada => { ehDemo = ligada; })]);
+  await mostrarPainel(sessao);
 } catch (erro) {
-  if (erro instanceof SemSessao) mostrarEntrada();
+  if (erro instanceof SemSessao) {
+    ehDemo = await demo;
+    mostrarEntrada();
+  }
   else { $("carregando").textContent = erro.message; }
 }

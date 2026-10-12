@@ -105,7 +105,9 @@ public static class SemeaduraDaDemo
         var antigos = await banco.Links.Select(l => l.Codigo).ToListAsync(cancelar);
         await banco.Cliques.ExecuteDeleteAsync(cancelar);
         await banco.Links.ExecuteDeleteAsync(cancelar);
-        banco.Links.AddRange(links);
+        // De trás para frente: com a mesma data de criação, a lista (do mais novo ao mais antigo, pelo id)
+        // mostra os links na ordem de Exemplos, os principais primeiro
+        banco.Links.AddRange(Enumerable.Reverse(links));
         banco.Cliques.AddRange(cliques);
         await banco.SaveChangesAsync(cancelar);
         await transacao.CommitAsync(cancelar);
