@@ -116,6 +116,8 @@ services:
       DOMINIO: ${DOMINIO:?defina DOMINIO no .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Os sites dos outros projetos da VM (o Pursuit), importados pelo Caddyfile
+      - ./sites:/etc/caddy/sites:ro
       - caddy_dados:/data
       - caddy_config:/config
     mem_limit: 64m

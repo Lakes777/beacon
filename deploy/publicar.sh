@@ -31,6 +31,9 @@ done
 echo "Enviando para a VM (comprimidas)..."
 docker save "beacon-api:$VERSAO" beacon-api:latest "beacon-estatisticas:$VERSAO" beacon-estatisticas:latest \
 	| gzip | ssh -i "$CHAVE_SSH" "$VM" "gunzip | docker load -q"
+# A pasta dos sites de outros projetos (o Pursuit) é criada aqui, com o dono certo: se o Docker a
+# criasse ao montar o volume, ela ficaria do root, e o publicar.sh do Pursuit não conseguiria escrever nela
+ssh -i "$CHAVE_SSH" "$VM" "mkdir -p $PASTA/sites"
 scp -q -i "$CHAVE_SSH" deploy/compose.yaml deploy/Caddyfile deploy/backup.sh "$VM:$PASTA/"
 
 # O "up" espera a API ficar saudável (o Caddy e o serviço de estatísticas dependem disso)

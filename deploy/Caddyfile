@@ -9,3 +9,6 @@
 		-Server
 	}
 }
+
+# Outros projetos na mesma VM (o Pursuit) põem o site deles em ~/beacon/sites/ e recarregam o Caddy
+import /etc/caddy/sites/*.caddy
