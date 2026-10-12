@@ -34,13 +34,19 @@
 html, body { margin: 0; min-height: 100%; }
 body {
   background-color: var(--mar);
-  background-image: repeating-radial-gradient(circle at 100% 0, transparent 0 34px, #1f324770 34px 35px);
-  background-size: 620px 620px;
-  background-position: top right;
-  background-repeat: no-repeat;
   color: var(--espuma);
   font: 15px/1.5 var(--texto);
   -webkit-font-smoothing: antialiased;
+}
+/* Os círculos de contorno: saem do canto e vão sumindo aos poucos (a máscara), sem a borda reta que um
+   fundo de tamanho fixo deixaria. Presos à janela (fixed): não aumentam a página nem criam barra de
+   rolagem. Atrás de tudo e sem receber cliques. */
+body::before {
+  content: ""; position: fixed; top: 0; right: 0; z-index: -1; pointer-events: none;
+  width: min(1100px, 100vw); height: min(1100px, 100vh);
+  background: repeating-radial-gradient(circle at 100% 0, transparent 0 34px, #1f324790 34px 35px);
+  -webkit-mask-image: radial-gradient(circle at 100% 0, #000 25%, transparent 70%);
+  mask-image: radial-gradient(circle at 100% 0, #000 25%, transparent 70%);
 }
 [hidden] { display: none !important; }
 .sprite { display: none; }
