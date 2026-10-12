@@ -32,7 +32,8 @@ public static class SemeaduraDaDemo
 
     /// <summary>
     /// Os links de exemplo: três escolhidos à mão e quatro aleatórios como os que o Pursuit cria por
-    /// candidatura. Destinos só do próprio André: a demo nunca leva a um site de outra pessoa.
+    /// candidatura. Três deles (k7qm2xz, rt4pw9a, b3nvx8e) são os das fichas da demo do Pursuit, que
+    /// aponta para esta: lá, a ficha mostra "Aberto N vezes" com estes cliques. Destinos só do próprio André: a demo nunca leva a um site de outra pessoa.
     /// Peso = parte dos cliques; Origens = de onde as pessoas chegam a ele (null = acesso direto).
     /// </summary>
     private static readonly LinkDeExemplo[] Exemplos =
@@ -40,14 +41,25 @@ public static class SemeaduraDaDemo
         new("portfolio-linkedin", Portfolio, true, 30, ["www.linkedin.com", "www.linkedin.com", "lnkd.in", null]),
         new("github-perfil", GitHub, true, 18, ["github.com", "github.com", "www.linkedin.com", null]),
         new("curriculo-geral", Portfolio, true, 16, ["mail.google.com", null, null]),
-        new("k7mqp2x", Portfolio, true, 13, ["mail.google.com", "www.linkedin.com", null]),
-        new("hw3tbnr", GitHub + "/beacon", true, 10, ["mail.google.com", null]),
-        new("p9fjdve", Portfolio, true, 8, ["www.linkedin.com", "lnkd.in", null]),
+        new("k7qm2xz", Portfolio, true, 13, ["mail.google.com", "www.linkedin.com", null]),
+        new("rt4pw9a", Portfolio, true, 10, ["mail.google.com", null]),
+        new("b3nvx8e", Portfolio, true, 8, ["www.linkedin.com", "lnkd.in", null]),
         // Uma candidatura encerrada: mostra o estado "desativado" na lista
         new("xr4sa8m", Portfolio, false, 5, ["mail.google.com", null]),
     ];
 
     private sealed record LinkDeExemplo(string Codigo, string Destino, bool Ativo, int Peso, string?[] Origens);
+
+    /// <summary>
+    /// Os links que as fichas de exemplo da demo do Pursuit já trazem (ela aponta para esta demo): os
+    /// códigos precisam existir aqui, criados há ~20 dias, com poucos cliques de pessoas nos últimos dias.
+    /// </summary>
+    private static readonly (string Codigo, int Cliques)[] DoPursuit = [("k7qm2xz", 4), ("rt4pw9a", 2), ("b3nvx8e", 5)];
+
+    public const int DiasDesdeACriacaoDoPursuit = 20;
+
+    /// <summary>Os cliques dos links do Pursuit ficam nos últimos 6 dias (a candidatura é recente).</summary>
+    public const int DiasDeCliquesDoPursuit = 6;
 
     /// <returns>O código de saída do programa (0 = deu certo).</returns>
     public static async Task<int> Rodar(IServiceProvider servicos)
@@ -100,13 +112,27 @@ public static class SemeaduraDaDemo
             CriadoEm = criadoEm,
         }).ToList();
         var cliques = Enumerable.Range(0, TotalDeCliques).Select(_ => Clique(sorteio, agora)).ToList();
+        foreach (var (codigo, quantos) in DoPursuit)
+        {
+            links.Add(new Link
+            {
+                Codigo = codigo,
+                Destino = Destinos.Validar(Portfolio).Destino!,
+                CriadoEm = agora.AddDays(-DiasDesdeACriacaoDoPursuit),
+            });
+            cliques.AddRange(Enumerable.Range(0, quantos).Select(_ =>
+            {
+                var momento = agora.AddMinutes(-1 - sorteio.NextDouble() * (DiasDeCliquesDoPursuit * 24 * 60 - 1));
+                return Pessoa(sorteio, codigo, momento, ["mail.google.com", "www.linkedin.com", null]);
+            }));
+        }
 
         await using var transacao = await banco.Database.BeginTransactionAsync(cancelar);
         var antigos = await banco.Links.Select(l => l.Codigo).ToListAsync(cancelar);
         await banco.Cliques.ExecuteDeleteAsync(cancelar);
         await banco.Links.ExecuteDeleteAsync(cancelar);
         // De trás para frente: com a mesma data de criação, a lista (do mais novo ao mais antigo, pelo id)
-        // mostra os links na ordem de Exemplos, os principais primeiro
+        // mostra os links na ordem de Exemplos, os principais primeiro (os do Pursuit, mais novos, vêm antes)
         banco.Links.AddRange(Enumerable.Reverse(links));
         banco.Cliques.AddRange(cliques);
         await banco.SaveChangesAsync(cancelar);
@@ -146,7 +172,13 @@ public static class SemeaduraDaDemo
                 Origem = null,
             };
         }
-        var origem = link.Origens[sorteio.Next(link.Origens.Length)];
+        return Pessoa(sorteio, link.Codigo, momento, link.Origens);
+    }
+
+    /// <summary>Um clique de pessoa (não robô), com aparelho, sistema e navegador que combinam entre si.</summary>
+    private static Clique Pessoa(Random sorteio, string codigo, DateTimeOffset momento, string?[] origens)
+    {
+        var origem = origens[sorteio.Next(origens.Length)];
         var (aparelho, sistema, navegador) = sorteio.NextDouble() switch
         {
             < 0.40 => ("computador", "Windows", Sortear(sorteio, [("Chrome", 6), ("Edge", 3), ("Firefox", 1)])),
@@ -158,8 +190,8 @@ public static class SemeaduraDaDemo
         };
         return new Clique
         {
-            Id = id,
-            Codigo = link.Codigo,
+            Id = Guid.CreateVersion7(momento),
+            Codigo = codigo,
             Momento = momento,
             Robo = false,
             Navegador = navegador,

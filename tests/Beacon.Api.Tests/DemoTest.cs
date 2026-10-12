@@ -219,7 +219,7 @@ public class DemoTest(ApiDeTeste api, DemoDeTeste demo) : IClassFixture<DemoDeTe
         var segunda = await Semear();
 
         Assert.Equal(primeira, segunda);
-        Assert.InRange(segunda.Links, 6, 8);
+        Assert.InRange(segunda.Links, 9, 11);
         Assert.InRange(segunda.Cliques, 200, 300);
 
         await using (var escopo = demo.Fabrica.Services.CreateAsyncScope())
@@ -249,6 +249,19 @@ public class DemoTest(ApiDeTeste api, DemoDeTeste demo) : IClassFixture<DemoDeTe
             Assert.Contains(cliques, c => c.Origem is null);
             Assert.Contains(cliques, c => c.Origem == "www.linkedin.com");
             Assert.True(cliques.Select(c => c.Navegador).Distinct().Count() >= 4);
+
+            // Os códigos das fichas da demo do Pursuit: criados há ~20 dias, com poucos cliques de pessoas e recentes
+            foreach (var (codigo, quantos) in new[] { ("k7qm2xz", 4), ("rt4pw9a", 2), ("b3nvx8e", 5) })
+            {
+                var link = Assert.Single(links, l => l.Codigo == codigo);
+                Assert.True(link.Ativo);
+                Assert.Equal("https://lakes777.github.io/", link.Destino);
+                Assert.InRange(link.CriadoEm, agora.AddDays(-21), agora.AddDays(-19));
+                var doLink = cliques.Where(c => c.Codigo == codigo).ToList();
+                Assert.Equal(quantos, doLink.Count);
+                Assert.All(doLink, c => Assert.False(c.Robo));
+                Assert.All(doLink, c => Assert.True(c.Momento >= agora.AddDays(-SemeaduraDaDemo.DiasDeCliquesDoPursuit).AddMinutes(-5)));
+            }
         }
     }
 
