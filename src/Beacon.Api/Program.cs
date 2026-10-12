@@ -1,6 +1,7 @@
 using Beacon.Api.Banco;
 using Beacon.Api.Cache;
 using Beacon.Api.Contas;
+using Beacon.Api.Demo;
 using Beacon.Api.Estatisticas;
 using Beacon.Api.Links;
 using Beacon.Api.Mensageria;
@@ -18,6 +19,8 @@ if (usoErrado is not null)
     Console.Error.WriteLine(usoErrado);
     return 1;
 }
+// "semear-demo" põe os dados de exemplo na demonstração (ver SemeaduraDaDemo) em vez de subir a API
+var semearDemo = args is [SemeaduraDaDemo.Comando];
 var builder = WebApplication.CreateBuilder(args);
 ChaveDeIntegracao.Conferir(builder.Configuration);
 
@@ -128,6 +131,15 @@ if (contaParaDefinir is not null)
 {
     return await ComandoDefinirSenha.Rodar(app.Services, contaParaDefinir);
 }
+if (semearDemo)
+{
+    return await SemeaduraDaDemo.Rodar(app.Services);
+}
+// A demonstração recém-criada (banco vazio) já sobe com os dados de exemplo, sem esperar o cron
+if (ModoDemo.Ativo(app.Configuration))
+{
+    await SemeaduraDaDemo.SemearSeVazio(app.Services, app.Logger);
+}
 
 // Primeiro de tudo: os próximos (limite de login, cookie, urlCurta) já veem o IP e o https verdadeiros
 app.UseForwardedHeaders();
@@ -156,6 +168,7 @@ app.MapScalarApiReference("/docs", opcoes => opcoes.WithTitle("Beacon")).AllowAn
 
 app.MapHealthChecks("/saude").AllowAnonymous();
 app.MapearSessao();
+app.MapearDemo();
 app.MapearLinks();
 app.MapearEstatisticas();
 

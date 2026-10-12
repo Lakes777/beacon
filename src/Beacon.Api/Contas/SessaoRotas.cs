@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Beacon.Api.Banco;
+using Beacon.Api.Demo;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
@@ -15,7 +16,8 @@ namespace Beacon.Api.Contas;
 /// <param name="Usuario">O nome da conta (maiúsculas e minúsculas tanto faz).</param>
 public record Login(string? Usuario, string? Senha);
 
-public record SessaoResposta(string Usuario);
+/// <param name="Visitante">true para quem entrou como visitante na demonstração (o painel esconde o que muda dados).</param>
+public record SessaoResposta(string Usuario, bool Visitante = false);
 
 /// <summary>
 /// Login por cookie: POST /api/sessao confere a senha e devolve um cookie que o navegador manda
@@ -72,9 +74,12 @@ public static class SessaoRotas
             .SetFallbackPolicy(new AuthorizationPolicyBuilder(
                     CookieAuthenticationDefaults.AuthenticationScheme, ChaveDeIntegracao.Esquema)
                 .RequireAuthenticatedUser()
-                // A chave só lê e cria links: um DELETE com ela dá 403
-                .RequireAssertion(contexto => ChaveDeIntegracao.PodeUsar(contexto.User, contexto.Resource as HttpContext))
+                // A chave só lê e cria links: um DELETE com ela dá 403. O visitante da demonstração só lê.
+                .RequireAssertion(contexto => ChaveDeIntegracao.PodeUsar(contexto.User, contexto.Resource as HttpContext)
+                    && ModoDemo.PodeUsar(contexto.User, contexto.Resource as HttpContext))
                 .Build());
+        // O 403 do visitante sai com o motivo (ver RespostaDaAutorizacao)
+        servicos.AddSingleton<IAuthorizationMiddlewareResultHandler, RespostaDaAutorizacao>();
 
         // Contra quem tenta adivinhar a senha: poucas tentativas de login por minuto por endereço IP
         var tentativas = configuracao.GetValue("Login:TentativasPorMinuto", 10);
@@ -168,7 +173,7 @@ public static class SessaoRotas
     }
 
     private static Ok<SessaoResposta> Atual(ClaimsPrincipal usuario) =>
-        TypedResults.Ok(new SessaoResposta(usuario.Identity!.Name!));
+        TypedResults.Ok(new SessaoResposta(usuario.Identity!.Name!, ModoDemo.EhVisitante(usuario)));
 
     /// <summary>
     /// A cada pedido com cookie: a conta ainda existe e o carimbo é o mesmo? Se a senha foi trocada
@@ -176,6 +181,17 @@ public static class SessaoRotas
     /// </summary>
     private static async Task ConferirCarimbo(CookieValidatePrincipalContext contexto)
     {
+        // O visitante não tem conta nem carimbo: o cookie dele vale enquanto a demonstração estiver ligada.
+        // Desligar a demo (ou o cookie parar numa instância sem ela) derruba a sessão na hora.
+        if (contexto.Principal is { } principal && ModoDemo.EhVisitante(principal))
+        {
+            if (!ModoDemo.Ativo(contexto.HttpContext.RequestServices.GetRequiredService<IConfiguration>()))
+            {
+                contexto.RejectPrincipal();
+                await contexto.HttpContext.SignOutAsync();
+            }
+            return;
+        }
         var id = contexto.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
         var carimbo = contexto.Principal?.FindFirstValue(ClaimDoCarimbo);
         var banco = contexto.HttpContext.RequestServices.GetRequiredService<BeaconContexto>();
