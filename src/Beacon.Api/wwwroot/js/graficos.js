@@ -30,13 +30,15 @@ export function barrasPorDia(container, porDia) {
   container.replaceChildren();
   const largura = 600, altura = 120, n = porDia.length;
   const maximo = Math.max(1, ...porDia.map(d => d.cliques));
+  const total = porDia.reduce((s, d) => s + d.cliques, 0);
   const passo = largura / n;
   const folga = n > 45 ? 0.6 : n > 14 ? 1.5 : 4;
   const y = v => altura - (v / maximo) * (altura - 14);
 
   const desenho = svg("svg", { viewBox: `0 0 ${largura} ${altura}`, preserveAspectRatio: "none", role: "img",
-    "aria-label": `${plural(porDia.reduce((s, d) => s + d.cliques, 0), "clique", "cliques")} em ${n} dias; o maior dia teve ${maximo}` });
-  for (const f of [0.5]) desenho.append(svg("line", { class: "guia", x1: 0, x2: largura, y1: y(maximo * f), y2: y(maximo * f) }));
+    "aria-label": total ? `${plural(total, "clique", "cliques")} em ${n} dias; o maior dia teve ${maximo}` : `nenhum clique em ${n} dias` });
+  // Sem clique no período, a escala ("máx. 1") e a linha do meio não dizem nada: só o aviso e o eixo
+  if (total) for (const f of [0.5]) desenho.append(svg("line", { class: "guia", x1: 0, x2: largura, y1: y(maximo * f), y2: y(maximo * f) }));
   const barras = porDia.map((d, i) => {
     // Dia sem clique ainda mostra um traço, para o eixo não parecer vazio
     const topo = d.cliques ? y(d.cliques) : altura - 1.5;
@@ -49,7 +51,7 @@ export function barrasPorDia(container, porDia) {
   porDia.forEach((_, i) => desenho.append(svg("rect", { class: "alvo", "data-i": i, x: i * passo, y: 0, width: passo, height: altura })));
 
   const dica = el("div", { class: "dica", hidden: true });
-  const maximoRotulo = el("span", { class: "maximo" }, `máx. ${maximo}`);
+  const maximoRotulo = el("span", { class: "maximo" }, total ? `máx. ${maximo}` : `nenhum clique em ${n} dias`);
   const eixo = el("div", { class: "eixo" }, el("span", {}, data(porDia[0].dia)), el("span", {}, `hoje, ${data(porDia[n - 1].dia)}`));
   container.append(maximoRotulo, desenho, eixo, dica);
 
