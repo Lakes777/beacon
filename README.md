@@ -52,6 +52,8 @@ na fila e são contados quando ele voltar.
 | `POST` | `/api/sessao` | Entra: `usuario` e `senha`; devolve o cookie da sessão (público, com limite de tentativas) |
 | `GET` | `/api/sessao` | Quem está logado |
 | `DELETE` | `/api/sessao` | Sai (público) |
+| `POST` | `/api/sessao/visitante` | Só na demonstração: entra como visitante, sem senha, para só ler (público, com o limite do login; 404 fora dela) |
+| `GET` | `/api/demo` | `{"demo": true}` na instância de demonstração (público) |
 | `POST` | `/api/links` | Cria um link: `destino` obrigatório, `codigo` opcional (sem ele, um aleatório de 7 caracteres) |
 | `GET` | `/api/links` | Lista os links, do mais novo ao mais antigo |
 | `GET` | `/api/links/{codigo}` | Busca um link |
@@ -223,6 +225,37 @@ Primeira vez na VM:
 4. Rodar `deploy/publicar.sh` e criar a conta do painel:
    `docker compose exec api dotnet Beacon.Api.dll definir-senha <nome>`.
 5. Backup: `0 3 * * * ~/beacon/backup.sh` no `crontab -e`.
+
+## Demonstração
+
+Uma segunda instância do Beacon, com dados de exemplo, onde qualquer pessoa entra sem senha para ver o
+painel funcionando. Ela é **somente leitura**: um encurtador aberto ao público vira ferramenta de golpe
+(alguém criaria `/r/xyz` levando a uma página falsa de banco, no meu domínio).
+
+- **Ligada por configuração:** `Demo:Ativo` (variável `Demo__Ativo`), desligada por padrão. Desligada,
+  nada muda: `POST /api/sessao/visitante` dá 404 e um cookie de visitante deixa de valer.
+- **Visitante:** com a demo ligada, a tela de entrada mostra o botão *Entrar como visitante*. A sessão é
+  o mesmo cookie do login, com o claim `papel=visitante` e sem linha na tabela `usuario` (não há senha
+  nem carimbo; o cookie vale enquanto a demo estiver ligada). O botão tem o mesmo limite de tentativas
+  do login.
+- **Só lê:** a política padrão ganhou uma regra, como a da chave de integração: o visitante só faz
+  `GET` (a lista, os números, o QR). `POST`, `PUT` e `DELETE` dão 403 com o motivo em problem details,
+  e o painel esconde *Novo link*, editar e apagar. Sair continua valendo. A chave de integração segue
+  como está (lê e cria): a demo do Pursuit cria links na demo do Beacon.
+- **Dados de exemplo:** `semear-demo` apaga links e cliques e põe 7 links (alguns com nome, outros com
+  código aleatório, como os que o Pursuit cria) e 250 cliques nos últimos 30 dias, mais perto de hoje,
+  com origens, aparelhos e navegadores variados e ~10% de prévias do LinkedIn. Destinos só do
+  meu portfólio e do meu GitHub. Grava direto no banco (sem passar pela fila), numa transação, e apaga
+  a cópia de cada link no Redis. Sempre o mesmo conjunto (semente fixa), com as datas contadas a partir de agora.
+  **Só roda com `Demo:Ativo` ligado:** no banco real, o comando sai com erro sem tocar em nada. Uma demo
+  com o banco vazio se semeia sozinha ao subir.
+- **Volta ao original de hora em hora:** um cron na VM roda o comando, o que desfaz os links criados
+  pela demo do Pursuit:
+  `0 * * * * cd ~/beacon && docker compose exec -T api-demo dotnet Beacon.Api.dll semear-demo`
+  (o nome do contêiner depende do compose da demo).
+- **Instância separada:** outros contêineres `api` e `estatisticas`, com `Demo__Ativo=true`, banco
+  `beacon_demo`, outro database do Redis (ex.: `redis:6379,defaultDatabase=1`), outro vhost do
+  RabbitMQ e outra pasta de chaves do cookie. Nada da demo encosta nos links de verdade.
 
 ## Login
 
