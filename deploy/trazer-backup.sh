@@ -3,7 +3,7 @@
 # Tarefas do Windows (tarefa "Beacon - trazer backup"), via WSL. Guarda os últimos 30 dias.
 set -euo pipefail
 
-VM="${VM:-ubuntu@IP_DA_VM}"
+VM="${VM:-ubuntu@159.112.189.95}"
 CHAVE_SSH="${CHAVE_SSH:-$HOME/.ssh/oracle_bot}"
 DESTINO="${DESTINO:-/mnt/d/Backups/Beacon}"
 mkdir -p "$DESTINO"

@@ -3,7 +3,7 @@
 # conexão SSH e reinicia. A VM não precisa do código nem do .NET, só do Docker. Uso: deploy/publicar.sh
 set -euo pipefail
 
-VM="${VM:-ubuntu@IP_DA_VM}"
+VM="${VM:-ubuntu@159.112.189.95}"
 CHAVE_SSH="${CHAVE_SSH:-$HOME/.ssh/oracle_bot}"
 PASTA="beacon"
 cd "$(dirname "$0")/.."
