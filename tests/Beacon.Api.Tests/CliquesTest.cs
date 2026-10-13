@@ -52,6 +52,27 @@ public class CliquesTest(ApiDeTeste api)
     }
 
     [Fact]
+    public async Task HeadRedirecionaSemLoginESemContarClique()
+    {
+        var codigo = await Criar();
+        // Sem cookie, como o robô do LinkedIn: antes, o HEAD caía na política padrão e levava 401
+        using var anonimo = api.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var head = new HttpRequestMessage(HttpMethod.Head, $"/r/{codigo}");
+        head.Headers.UserAgent.ParseAdd("LinkedInBot/1.0");
+
+        var resposta = await anonimo.SendAsync(head, Cancelar);
+
+        Assert.Equal(HttpStatusCode.Redirect, resposta.StatusCode);
+        Assert.Equal("https://exemplo.com/", resposta.Headers.Location?.ToString());
+        // O GET depois serve de marco: se o HEAD tivesse publicado, o primeiro clique seria o dele
+        var get = new HttpRequestMessage(HttpMethod.Get, $"/r/{codigo}");
+        get.Headers.UserAgent.ParseAdd("navegador-de-verdade");
+        await anonimo.SendAsync(get, Cancelar);
+        var (_, clique) = await Procurar(codigo);
+        Assert.Equal("navegador-de-verdade", clique.UserAgent);
+    }
+
+    [Fact]
     public async Task LinkQueNaoExisteNaoGeraClique()
     {
         var codigo = CodigoUnico();

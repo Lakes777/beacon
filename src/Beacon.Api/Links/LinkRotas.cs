@@ -28,7 +28,9 @@ public static class LinkRotas
         links.MapDelete("/{codigo}", Apagar).WithSummary("Apaga um link");
         links.MapGet("/{codigo}/qr", Qr).WithSummary("QR code do link curto, em SVG");
 
-        app.MapGet("/r/{codigo}", Redirecionar)
+        // HEAD também: robôs que montam a prévia de um link (o do LinkedIn) perguntam com HEAD antes do GET,
+        // e só GET mandava o HEAD para a política padrão, que pede login (401) e fazia a prévia falhar
+        app.MapMethods("/r/{codigo}", [HttpMethods.Get, HttpMethods.Head], Redirecionar)
             .WithTags("Redirecionamento")
             .AllowAnonymous()
             .WithSummary("Leva ao destino do link (302); 404 se não existe ou está desativado");
@@ -232,6 +234,11 @@ public static class LinkRotas
         if (destino is null)
         {
             return TypedResults.NotFound();
+        }
+        // HEAD só pergunta para onde vai, não é uma visita: redireciona igual, sem contar clique
+        if (HttpMethods.IsHead(requisicao.Method))
+        {
+            return TypedResults.Redirect(destino);
         }
         // Só deixa o clique na fila em memória (não espera o RabbitMQ): o redirecionamento sai na hora
         fila.Entregar(new CliqueRegistrado(Guid.CreateVersion7(), normalizado, DateTimeOffset.UtcNow,
