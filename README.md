@@ -4,7 +4,8 @@
 
 [![CI](https://github.com/Lakes777/beacon/actions/workflows/ci.yml/badge.svg)](https://github.com/Lakes777/beacon/actions/workflows/ci.yml)
 
-**No ar:** https://159-112-189-95.sslip.io (painel, com login) · [API](https://159-112-189-95.sslip.io/docs)
+**Demonstração:** https://demo-beacon.159-112-189-95.sslip.io (entre como visitante, somente leitura)
+· **No ar:** https://159-112-189-95.sslip.io (painel, com login) · [API](https://159-112-189-95.sslip.io/docs)
 
 Você cria um link curto (por exemplo `.../r/curriculo-vaga-x`) que leva a qualquer endereço, e o Beacon
 conta quantas pessoas clicaram, quando, de onde e por qual aparelho. A ideia nasceu de uma pergunta
