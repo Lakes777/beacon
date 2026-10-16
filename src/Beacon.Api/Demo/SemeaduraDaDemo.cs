@@ -27,7 +27,7 @@ public static class SemeaduraDaDemo
     /// <summary>Semente fixa: toda hora volta exatamente o mesmo conjunto, só deslocado para o "agora".</summary>
     private const int Semente = 777;
 
-    private const string Portfolio = "https://lakes777.github.io";
+    private const string Portfolio = "https://andrelagos.dev";
     private const string GitHub = "https://github.com/Lakes777";
 
     /// <summary>

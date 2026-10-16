@@ -26,7 +26,7 @@ public static class ModoDemo
 
     public static bool Ativo(IConfiguration configuracao) => configuracao.GetValue(Configuracao, false);
 
-    public const string DestinoProibido = "Na demonstração, os links só levam ao portfólio (lakes777.github.io) ou ao GitHub do André (github.com/Lakes777).";
+    public const string DestinoProibido = "Na demonstração, os links só levam ao portfólio (andrelagos.dev) ou ao GitHub do André (github.com/Lakes777).";
 
     /// <summary>
     /// Na demonstração, um link só pode levar a um site do André, mesmo criado pela chave de integração
@@ -34,7 +34,7 @@ public static class ModoDemo
     /// </summary>
     public static bool DestinoPermitido(string destino) =>
         Uri.TryCreate(destino, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && uri.Port == 443
-        && (uri.Host == "lakes777.github.io"
+        && (uri.Host is "andrelagos.dev" or "lakes777.github.io"
             || (uri.Host == "github.com" && (uri.AbsolutePath == "/Lakes777" || uri.AbsolutePath.StartsWith("/Lakes777/", StringComparison.Ordinal))));
 
     /// <summary>

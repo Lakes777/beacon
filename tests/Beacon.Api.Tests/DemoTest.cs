@@ -145,7 +145,7 @@ public class DemoTest(ApiDeTeste api, DemoDeTeste demo) : IClassFixture<DemoDeTe
         }
         // Nada mudou
         var link = await cliente.GetFromJsonAsync<LinkResposta>($"/api/links/{codigo}", Cancelar);
-        Assert.Equal("https://lakes777.github.io/", link!.Destino);
+        Assert.Equal("https://andrelagos.dev/", link!.Destino);
         Assert.True(link.Ativo);
         Assert.Equal(HttpStatusCode.NotFound, (await cliente.GetAsync("/api/links/banco-falso", Cancelar)).StatusCode);
     }
@@ -255,7 +255,7 @@ public class DemoTest(ApiDeTeste api, DemoDeTeste demo) : IClassFixture<DemoDeTe
             {
                 var link = Assert.Single(links, l => l.Codigo == codigo);
                 Assert.True(link.Ativo);
-                Assert.Equal("https://lakes777.github.io/", link.Destino);
+                Assert.Equal("https://andrelagos.dev/", link.Destino);
                 Assert.InRange(link.CriadoEm, agora.AddDays(-21), agora.AddDays(-19));
                 var doLink = cliques.Where(c => c.Codigo == codigo).ToList();
                 Assert.Equal(quantos, doLink.Count);
@@ -280,7 +280,7 @@ public class DemoTest(ApiDeTeste api, DemoDeTeste demo) : IClassFixture<DemoDeTe
     private static bool DestinoDoAndre(string destino)
     {
         var uri = new Uri(destino);
-        return uri.Scheme == "https" && (uri.Host == "lakes777.github.io"
+        return uri.Scheme == "https" && (uri.Host is "andrelagos.dev" or "lakes777.github.io"
             || (uri.Host == "github.com" && (uri.AbsolutePath == "/Lakes777" || uri.AbsolutePath.StartsWith("/Lakes777/", StringComparison.Ordinal))));
     }
 
@@ -299,10 +299,10 @@ public class DemoTest(ApiDeTeste api, DemoDeTeste demo) : IClassFixture<DemoDeTe
         var cliente = ComChave();
 
         var golpe = await cliente.PostAsJsonAsync("/api/links", new NovoLink("https://golpe.exemplo/banco", null), Cancelar);
-        var portfolio = await cliente.PostAsJsonAsync("/api/links", new NovoLink("https://lakes777.github.io", null), Cancelar);
+        var portfolio = await cliente.PostAsJsonAsync("/api/links", new NovoLink("https://andrelagos.dev", null), Cancelar);
 
         Assert.Equal(HttpStatusCode.BadRequest, golpe.StatusCode);
-        Assert.Contains("lakes777.github.io", await golpe.Content.ReadAsStringAsync(Cancelar));
+        Assert.Contains("andrelagos.dev", await golpe.Content.ReadAsStringAsync(Cancelar));
         Assert.Equal(HttpStatusCode.Created, portfolio.StatusCode);
     }
 
@@ -328,7 +328,9 @@ public class DemoTest(ApiDeTeste api, DemoDeTeste demo) : IClassFixture<DemoDeTe
     }
 
     [Theory]
-    [InlineData("https://lakes777.github.io/", true)]
+    [InlineData("https://andrelagos.dev/", true)]
+    [InlineData("https://andrelagos.dev/cadence/", true)]
+    [InlineData("https://lakes777.github.io/", true)] // o endereço antigo do portfólio, que redireciona ao novo
     [InlineData("https://github.com/Lakes777", true)]
     [InlineData("https://github.com/Lakes777/beacon", true)]
     [InlineData("https://github.com/Lakes7770", false)]
@@ -336,6 +338,10 @@ public class DemoTest(ApiDeTeste api, DemoDeTeste demo) : IClassFixture<DemoDeTe
     [InlineData("http://lakes777.github.io/", false)]
     [InlineData("https://lakes777.github.io.golpe.exemplo/", false)]
     [InlineData("https://lakes777.github.io:8443/", false)]
+    [InlineData("http://andrelagos.dev/", false)]
+    [InlineData("https://andrelagos.dev.golpe.exemplo/", false)]
+    [InlineData("https://golpe.andrelagos.dev.exemplo/", false)]
+    [InlineData("https://beacon.andrelagos.dev/r/x", false)] // um /r/ que leva a outro /r/ esconderia o destino
     public void DestinosPermitidosNaDemo(string destino, bool permitido) =>
         Assert.Equal(permitido, ModoDemo.DestinoPermitido(destino));
 

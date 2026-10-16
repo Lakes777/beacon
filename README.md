@@ -4,8 +4,8 @@
 
 [![CI](https://github.com/Lakes777/beacon/actions/workflows/ci.yml/badge.svg)](https://github.com/Lakes777/beacon/actions/workflows/ci.yml)
 
-**Demonstração:** https://demo-beacon.159-112-189-95.sslip.io (entre como visitante, somente leitura)
-· **No ar:** https://159-112-189-95.sslip.io (painel, com login) · [API](https://159-112-189-95.sslip.io/docs)
+**Demonstração:** https://demo-beacon.andrelagos.dev (entre como visitante, somente leitura)
+· **No ar:** https://beacon.andrelagos.dev (painel, com login) · [API](https://beacon.andrelagos.dev/docs)
 
 Você cria um link curto (por exemplo `.../r/curriculo-vaga-x`) que leva a qualquer endereço, e o Beacon
 conta quantas pessoas clicaram, quando, de onde e por qual aparelho. A ideia nasceu de uma pergunta
@@ -76,8 +76,8 @@ a chave de integração no lugar do login (veja [Chave de integração](#chave-d
 curl -c sessao.txt -X POST localhost:8090/api/sessao -H 'Content-Type: application/json' \
   -d '{"usuario": "andre", "senha": "..."}'
 curl -b sessao.txt -X POST localhost:8090/api/links -H 'Content-Type: application/json' \
-  -d '{"destino": "https://lakes777.github.io", "codigo": "portfolio"}'
-# {"codigo":"portfolio","destino":"https://lakes777.github.io","ativo":true,...,"urlCurta":"http://localhost:8090/r/portfolio"}
+  -d '{"destino": "https://andrelagos.dev", "codigo": "portfolio"}'
+# {"codigo":"portfolio","destino":"https://andrelagos.dev","ativo":true,...,"urlCurta":"http://localhost:8090/r/portfolio"}
 ```
 
 Erros vêm no formato padrão *problem details* (RFC 9457): 400 com os campos e o motivo de cada um,
@@ -227,7 +227,7 @@ Primeira vez na VM:
    `docker compose exec api dotnet Beacon.Api.dll definir-senha <nome>`.
 5. Backup: `0 3 * * * ~/beacon/backup.sh` no `crontab -e`.
 
-A demonstração (contêineres `api-demo` e `estatisticas-demo`, site `demo-beacon.159-112-189-95.sslip.io`) sobe
+A demonstração (contêineres `api-demo` e `estatisticas-demo`, site `demo-beacon.andrelagos.dev`) sobe
 junto no mesmo `docker compose`. Uma vez só, antes da primeira publicação com ela:
 
 1. No `.env`: `DOMINIO_DEMO` e `INTEGRACAO_CHAVE_DEMO` (outra chave, `openssl rand -hex 32`).
